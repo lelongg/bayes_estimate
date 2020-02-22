@@ -13,6 +13,8 @@ use bf::models::{LinearPredictor, LinearEstimator, KalmanEstimator, LinearObserv
 use bf::models::{KalmanState, InformationState, AdditiveNoise, LinearPredictModel, LinearCorrelatedObserveModel, LinearUncorrelatedObserveModel};
 use bf::ud_filter::UDState;
 
+use approx;
+
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -167,12 +169,12 @@ fn hx<D : Dim> (x: &VectorN<f64, D>) -> Vector1<f64>
 
 fn test_filter<D : Dim>(flt: &mut dyn Filter<D>)
     where
+        ShapeConstraint: SameNumberOfRows<U2, D> + SameNumberOfColumns<U2, D>,
         ShapeConstraint: SameNumberOfRows<D, U2> + SameNumberOfColumns<D, U2>,
         ShapeConstraint: SameNumberOfRows<U2, U2> + SameNumberOfColumns<U2, U2>,
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
             + Allocator<f64, U1, D> + Allocator<f64, D, U1> + Allocator<f64, U1> + Allocator<f64, U2, U2>
             + Allocator<usize, D, D> + Allocator<usize, D>
-
 {
     let state = flt.state().unwrap().1;
     let d = state.x.data.shape().0;
@@ -225,6 +227,20 @@ fn test_filter<D : Dim>(flt: &mut dyn Filter<D>)
     check( flt.observe_linear_special(&linear_co_obs_model, &s, &obs_x), "obs_linear").unwrap();
     let xx = flt.state().unwrap().1;println!("final={:.6}{:.6}", xx.x, xx.X);
     println!("{:} ms", elapsed);
+
+    let x2 = new_copy(U2, U1, &xx.x);
+    let xx2 = new_copy(U2, U2, &xx.X);
+    expect(KalmanState{x: x2, X: xx2});
+}
+
+fn expect(state : KalmanState<f64, U2>)
+{
+    let expect_x = Vector2::new(1000., 0.0152);
+    approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001);
+    approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01);
+
+    let expect_xx = Matrix2::new(0.000000, 0.000049, 0.000049, 0.014701);
+    assert!(det(&(state.X - expect_xx)).abs() < 0.000000000001);
 }
 
 
@@ -236,4 +252,13 @@ fn new_copy<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim>(r : R, c : C, m : &M
     let mut zeroed = MatrixMN::<N,R,C>::zeros_generic(r, c);
     zeroed.copy_from(&m);
     zeroed
+}
+
+fn det(m2 : &Matrix2<f64>) -> f64 {
+    let m11 = m2.get((0, 0)).unwrap();
+    let m12 = m2.get((0, 1)).unwrap();
+    let m21 = m2.get((1, 0)).unwrap();
+    let m22 = m2.get((1, 1)).unwrap();
+
+    m11 * m22 - m21 * m12
 }
