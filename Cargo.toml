@@ -1,0 +1,12 @@
+[package]
+name = "bayes_filter"
+version = "0.1.0"
+authors = ["Michael Stevens <mail@michael-stevens.de>"]
+edition = "2018"
+
+[dependencies]
+nalgebra = "0.19.0"
+
+[lib]
+name = "bayes_filter"
+path = "src/lib.rs"
