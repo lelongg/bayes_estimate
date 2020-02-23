@@ -7,8 +7,10 @@
       <sourceFolder url="file://$MODULE_DIR$/../rustTut/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/../rustTut/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/../rustTut/benches" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/../bayes-filter/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/../bayes-filter/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/benches" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
