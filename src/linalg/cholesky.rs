@@ -6,7 +6,7 @@
 
 #![allow(non_snake_case)]
 
-use crate::rcond;
+use super::rcond;
 use nalgebra as na;
 use na::{RealField, Dim, MatrixMN, VectorN};
 use na::{DefaultAllocator, allocator::Allocator};

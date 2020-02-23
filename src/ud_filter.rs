@@ -8,8 +8,8 @@ use na::{U1, Dynamic, DMatrix, MatrixMN, MatrixN, VectorN};
 use na::base::storage::Storage;
 
 use crate::models::{LinearEstimator, LinearPredictor, LinearObservationUncorrelated, KalmanState, AdditiveNoise, LinearUncorrelatedObserveModel, LinearCorrelatedObserveModel, KalmanEstimator, LinearPredictModel};
-use crate::UdU::UDU;
-use crate::matrix;
+use crate::linalg::cholesky::UDU;
+use crate::mine::matrix;
 
 
 pub struct UDState<N: RealField, D: Dim, XUD: Dim>
@@ -50,7 +50,7 @@ impl<N: RealField, D : Dim, XUD : Dim> UDState<N, D, XUD>
 		// Predict UD from model
 		let rcond = UDState::predictGq(self, scratch, &pred.Fx, &noise.G, &noise.q);
 
-		matrix::check_NN(rcond, "X not PSD")
+		matrix::check_positive(rcond, "X not PSD")
 	}
 
 	pub fn observe_innovation_use_scratch<ZD : Dim>(&mut self, scratch : &mut ObserveScratch<N, D>, obs: &LinearUncorrelatedObserveModel<N, D, ZD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>
@@ -107,7 +107,7 @@ impl<N: RealField, D : Dim, XUD : Dim> UDState<N, D, XUD>
 		{
 			ZZ.copy_from(&obs.Z);
 			let rcond = self.udu.UdUfactor_variant2(ZZ, ZZ.nrows());
-			matrix::check_NN(rcond, "Z not PSD in observe")?;
+			matrix::check_positive(rcond, "Z not PSD in observe")?;
 		}
 
 		// Observation prediction and normalised observation
@@ -144,7 +144,7 @@ impl<N: RealField, D : Dim, XUD : Dim> UDState<N, D, XUD>
 			let mut S = self.udu.zero;
 			GIHx.row(o).transpose_to(&mut scratch.a);
 			let rcond = UDState::observeUD(self, &mut scratch, &mut S, ZZ[(o, o)]);
-			matrix::check_NN(rcond, "S not PD in observe")?;    // -1 implies S singular
+			matrix::check_positive(rcond, "S not PD in observe")?;    // -1 implies S singular
 			if rcond < rcondmin {
 				rcondmin = rcond;
 			}
@@ -170,7 +170,7 @@ impl<N: RealField, D: Dim, XUD : Dim> KalmanEstimator<N, D> for UDState<N, D, XU
 		let rows = self.UD.nrows();
 		matrix::copy_from(&mut self.UD.columns_mut(0, rows), &state.X);
 		let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
-		matrix::check_NN(rcond, "X not PD")?;
+		matrix::check_positive(rcond, "X not PD")?;
 
 		Result::Ok(self.udu.one)
 	}

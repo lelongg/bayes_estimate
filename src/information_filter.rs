@@ -5,9 +5,24 @@ use nalgebra as na;
 use na::{RealField, Dim, U1, DefaultAllocator, allocator::Allocator, MatrixMN, MatrixN, VectorN};
 use na::base::storage::Storage;
 use crate::models::{LinearEstimator, KalmanState, InformationState, LinearPredictor, LinearPredictModel, AdditiveNoise, LinearCorrelatedObserveModel, LinearUncorrelatedObserveModel, KalmanEstimator};
-use crate::matrix::{check_NN, prod_SPD, prod_SPDT};
-use crate::UdU::UDU;
+use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
+use crate::linalg::cholesky::UDU;
 
+/// Information filter.
+///
+/// A Bayesian filter that uses a linear information repesentation of the system for filtering.
+/// The information state is simply the i,I pair where i is a vector and I a PSD matrix, the dimensions
+/// of both are the dimensions of the system.
+///
+/// The Kalman state and Information state are equivilent:
+/// I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
+///
+/// A fundenmental property of the Information state is that Information is addative. So if there is more information
+/// about the system (such as by an observeration) this can simply be added to i,I Information state.
+///
+/// This linear information state representation can also be use for non-linear system by using linearised
+/// forms of the system model.
+///
 
 impl<N: RealField, D: Dim> InformationState<N, D>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
@@ -37,7 +52,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>
         // Information
         self.I = state.X.clone();
         let rcond = UDU::new().UdUinversePD(&mut self.I);
-        check_NN(rcond, "X not PD")?;
+        check_positive(rcond, "X not PD")?;
         // Information state
         self.i = &self.I * &state.x;
 
@@ -48,7 +63,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
-        check_NN(rcond, "Y not PD")?;
+        check_positive(rcond, "Y not PD")?;
         // State
         let x = &X * &self.i;
 
@@ -65,11 +80,11 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationSta
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
-        check_NN(rcond, "I not PD in predict")?;
+        check_positive(rcond, "I not PD in predict")?;
 
         // Predict information matrix, and state covariance
-        X = prod_SPD(&pred.Fx, &X);
-        X += prod_SPD(&noise.G, &MatrixN::from_diagonal(&noise.q));
+        X = prod_spd(&pred.Fx, &X);
+        X += prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
 
         self.init(&KalmanState{x: x_pred, X})
     }
@@ -94,9 +109,9 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         let I_shape = self.I.data.shape();
 
         // A = invFx'*Y*invFx ,Inverse Predict covariance
-        let A = prod_SPDT(&pred_inv.Fx, &self.I);
+        let A = prod_spdt(&pred_inv.Fx, &self.I);
         // B = G'*A*G+invQ , A in coupled additive noise space
-        let mut B = prod_SPDT(&noise.G, &A);
+        let mut B = prod_spdt(&noise.G, &A);
         for i in 0..noise.q.nrows()
         {
             if noise.q[i] < N::zero() {    // allow PSD q, let infinity propagate into B
@@ -107,10 +122,10 @@ impl<N: RealField, D : Dim> InformationState<N, D>
 
         // invert B ,additive noise
         let rcond = UDU::new().UdUinversePDignoreInfinity(&mut B);
-        check_NN(rcond, "(G'invFx'.I.inv(Fx).G + inv(Q)) not PD")?;
+        check_positive(rcond, "(G'invFx'.I.inv(Fx).G + inv(Q)) not PD")?;
 
         // G*invB*G' ,in state space
-        self.I = prod_SPD(&noise.G, &B);
+        self.I = prod_spd(&noise.G, &B);
         // I - A* G*invB*G' ,information gain
         let ig = MatrixMN::identity_generic(I_shape.0, I_shape.1) - &A * &self.I;
         // Information
@@ -137,7 +152,7 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         // Observation Information
         let mut ZI = obs.Z.clone();
         let rcond = UDU::new().UdUinversePD(&mut ZI);
-        check_NN(rcond, "Z not PD")?;
+        check_positive(rcond, "Z not PD")?;
 
         let HxTZI = obs.Hx.transpose() * ZI;
         // Calculate EIF i = Hx'*ZI*zz
@@ -157,7 +172,7 @@ impl<N: RealField, D : Dim> InformationState<N, D>
 
         // Observation Information
         let rcond = UDU::UdUrcond_vec(&obs.Zv);
-        check_NN(rcond, "Zv not PD")?;
+        check_positive(rcond, "Zv not PD")?;
 
                                                 // HxTZI = Hx'*inverse(Z)
         let mut HxTZI = obs.Hx.transpose();

@@ -5,19 +5,19 @@ use na::{RealField, Dim, DefaultAllocator, allocator::Allocator, Matrix, Scalar,
 use na::base::storage::{Storage, StorageMut};
 
 
-pub fn prod_SPD<N: RealField, R: Dim, C: Dim>(X: &MatrixMN<N, R, C>, S: &MatrixN<N, C>) -> MatrixN<N, R>
+pub fn prod_spd<N: RealField, R: Dim, C: Dim>(x: &MatrixMN<N, R, C>, s: &MatrixN<N, C>) -> MatrixN<N, R>
     where
         DefaultAllocator: Allocator<N, R, C> + Allocator<N, C, R> + Allocator<N, R, R> + Allocator<N, C, C>
 {
-    X * S * X.transpose()
+    x * s * x.transpose()
 }
 
-pub fn prod_SPDT<N: RealField, R: Dim, C: Dim>(X: &MatrixMN<N, R, C>, S: &MatrixN<N, R>) -> MatrixN<N, C>
+pub fn prod_spdt<N: RealField, R: Dim, C: Dim>(x: &MatrixMN<N, R, C>, s: &MatrixN<N, R>) -> MatrixN<N, C>
     where
         DefaultAllocator:
         Allocator<N, R, C> + Allocator<N, C, R> + Allocator<N, R, R> + Allocator<N, C, C>
 {
-    (S * X).transpose() * X
+    (s * x).transpose() * x
 }
 
 pub fn as_zeros<N: RealField, R: Dim, C: Dim>(shape : (R,C)) -> MatrixMN<N,R,C>
@@ -53,7 +53,7 @@ pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(this : &mut Matrix<N, R1, C1, SB1>
  * Checks a the reciprocal condition number is >= 0
  * IEC 559 NaN values are never true
  */
-pub fn check_NN<'a, N: RealField>(rcond : N, message : &'a str) -> Result<N, &'a str>
+pub fn check_positive<'a, N: RealField>(rcond : N, message : &'a str) -> Result<N, &'a str>
 {
     if rcond >= N::zero() {
         Result::Ok(rcond)

@@ -5,8 +5,8 @@ use nalgebra as na;
 use na::{RealField, Dim, DimSub, Dynamic, U1, DefaultAllocator, allocator::Allocator, MatrixN, VectorN};
 use crate::models::{LinearEstimator, KalmanState, LinearPredictor, KalmanEstimator, LinearObservationCorrelated,
                     LinearPredictModel, AdditiveNoise, LinearCorrelatedObserveModel, LinearUncorrelatedObserveModel, LinearObservationUncorrelated};
-use crate::matrix::{prod_SPD, check_NN};
-use crate::UdU;
+use crate::mine::matrix::{prod_spd, check_positive};
+use crate::linalg::cholesky;
 
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -32,7 +32,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for KalmanState<N, D>
     fn init(&mut self, state : &KalmanState<N, D>) -> Result<N, &'static str> {
         self.x.copy_from(&state.x);
         self.X.copy_from(&state.X);
-        check_NN(UdU::UDU::UdUrcond(&self.X), "X not PD")?;
+        check_positive(cholesky::UDU::UdUrcond(&self.X), "X not PD")?;
 
         Result::Ok(N::one())
     }
@@ -52,7 +52,7 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for KalmanState<N,
 {
     fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred : VectorN<N, D>, noise: &AdditiveNoise<N, D, QD>) -> Result<N, &'static str> {
         self.x = x_pred;
-        self.X = &pred.Fx * self.X.clone() * pred.Fx.transpose() + prod_SPD(&noise.G, &MatrixN::from_diagonal(&noise.q));
+        self.X = &pred.Fx * self.X.clone() * pred.Fx.transpose() + prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
 
         Result::Ok(N::one())
     }
@@ -76,7 +76,7 @@ where
 
         // State update
         self.x += &W * s;
-        self.X -= prod_SPD(&W, &S2);
+        self.X -= prod_spd(&W, &S2);
 
         Result::Ok(N::one())
     }
