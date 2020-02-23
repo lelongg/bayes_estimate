@@ -4,7 +4,7 @@ use nalgebra as na;
 
 use na::{RealField, Dim, U1, DefaultAllocator, allocator::Allocator, MatrixMN, MatrixN, VectorN};
 use na::base::storage::Storage;
-use crate::models::{LinearEstimator, KalmanState, InformationState, LinearPredictor, LinearPredictModel, AdditiveNoise, LinearCorrelatedObserveModel, LinearUncorrelatedObserveModel, KalmanEstimator};
+use crate::models::{LinearEstimator, KalmanState, InformationState, LinearPredictor, LinearPredictModel, AdditiveNoise, LinearObserveModel, KalmanEstimator, AdditiveCorrelatedNoise};
 use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
 use crate::linalg::cholesky::UDU;
 
@@ -76,7 +76,7 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationSta
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D>
         + Allocator<N, D> + Allocator<N, QD>
 {
-    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred : VectorN<N, D>, noise: &AdditiveNoise<N, D, QD>) -> Result<N, &'static str> {
+    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred : VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
@@ -103,7 +103,7 @@ impl<N: RealField, D : Dim> InformationState<N, D>
      * particular care to avoid invertibility requirements for the noise and noise coupling g,Q
      * Therefore both zero noises and zeros in the couplings can be used
      */
-    pub fn predict_linear_invertable<QD : Dim>(&mut self, pred_inv: &LinearPredictModel<N, D>, noise: &AdditiveNoise<N, D, QD>) -> Result<N, &'static str>
+    pub fn predict_linear_invertable<QD : Dim>(&mut self, pred_inv: &LinearPredictModel<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str>
         where DefaultAllocator: Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>
     {
         let I_shape = self.I.data.shape();
@@ -142,15 +142,17 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         self.I += &information.I;
     }
 
-    pub fn observe_innovation_co<ZD : Dim>(&self, obs: &LinearCorrelatedObserveModel<N, D, ZD>, s: &VectorN<N, ZD>, x: &VectorN<N, D>)
-                                           -> Result<(N, InformationState<N, D>), &'static str>
+    pub fn observe_innovation_co<ZD : Dim, ZQD : Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+                                                      s: &VectorN<N, ZD>, x: &VectorN<N, D>) -> Result<(N, InformationState<N, D>), &'static str>
         where
-            DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
+            DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD>
+            + Allocator<N, ZQD, ZQD> + Allocator<N, ZQD, ZD> + Allocator<N, ZD, ZQD>
+            + Allocator<N, ZD> + Allocator<N, ZQD>
     {
         let zz = s + &obs.Hx * x;		// Strange EIF observation object
 
-        // Observation Information
-        let mut ZI = obs.Z.clone();
+        // Observation Information, TODO use inverse directly on q, D factors
+        let mut ZI = prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
         let rcond = UDU::new().UdUinversePD(&mut ZI);
         check_positive(rcond, "Z not PD")?;
 
@@ -163,22 +165,21 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         Result::Ok((rcond, InformationState{i, I}))
     }
 
-     pub fn observe_innovation_un<ZD : Dim>(&self, obs: &LinearUncorrelatedObserveModel<N, D, ZD>, s: &VectorN<N, ZD>, x: &VectorN<N, D>)
+     pub fn observe_innovation_un<ZD : Dim, ZQD : Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>, x: &VectorN<N, D>)
                                             -> Result<(N, InformationState<N, D>), &'static str>
          where
-             DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
+             DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD> + Allocator<N, ZQD>
      {
         let zz = s + &obs.Hx * x;		// Strange EIF observation object
 
         // Observation Information
-        let rcond = UDU::UdUrcond_vec(&obs.Zv);
+        let rcond = UDU::UdUrcond_vec(&noise.q);
         check_positive(rcond, "Zv not PD")?;
-
                                                 // HxTZI = Hx'*inverse(Z)
         let mut HxTZI = obs.Hx.transpose();
-        for w in 0..obs.Zv.nrows() {
+        for w in 0..noise.q.nrows() {
             let mut HxTZI_w = HxTZI.column_mut(w);
-            HxTZI_w *= N::one() / obs.Zv[w];
+            HxTZI_w *= N::one() / noise.q[w];
         }
 
         // Calculate EIF i = Hx'*ZI*zz

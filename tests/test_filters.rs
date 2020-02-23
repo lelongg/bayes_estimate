@@ -10,10 +10,11 @@ use na::base::constraint::{ShapeConstraint, SameNumberOfRows, SameNumberOfColumn
 
 use bayes_filter as bf;
 use bf::models::{LinearPredictor, LinearEstimator, KalmanEstimator, LinearObservationUncorrelated, LinearObservationCorrelated};
-use bf::models::{KalmanState, InformationState, AdditiveNoise, LinearPredictModel, LinearCorrelatedObserveModel, LinearUncorrelatedObserveModel};
+use bf::models::{KalmanState, InformationState, AdditiveNoise, LinearPredictModel, LinearObserveModel};
 use bf::ud_filter::UDState;
 
 use approx;
+use bayes_filter::models::AdditiveCorrelatedNoise;
 
 
 const DT: f64 = 0.01;
@@ -88,24 +89,24 @@ trait Filter<D: Dim>: LinearEstimator<f64> + KalmanEstimator<f64, D> + LinearPre
     where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>
 {
     fn trace_state(&self) {}
-    fn observe_innov(&mut self, obs: &LinearUncorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>;
-    fn observe_linear_special(&mut self, obs: &LinearCorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>;
+    fn observe_innov(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveNoise<f64, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>;
+    fn observe_linear_special(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveCorrelatedNoise<f64, U1, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>;
 }
 
 impl <D : Dim> Filter<D> for KalmanState<f64, D>
-    where Self : LinearObservationCorrelated<f64, D, U1>,
+    where Self : LinearObservationCorrelated<f64, D, U1, U1>,
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>
 {
-    fn observe_innov(&mut self, obs: &LinearUncorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
+    fn observe_innov(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveNoise<f64, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
         where DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>
     {
-        LinearObservationUncorrelated::observe_innovation(self, &obs, &s)
+        LinearObservationUncorrelated::observe_innovation(self, obs, noise, &s)
     }
 
-    fn observe_linear_special(&mut self, obs: &LinearCorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
+    fn observe_linear_special(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveCorrelatedNoise<f64, U1, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
         where DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>
     {
-        LinearObservationCorrelated::observe_innovation(self, obs, s)
+        LinearObservationCorrelated::observe_innovation(self, obs, noise, s)
     }
 }
 
@@ -113,18 +114,18 @@ impl <D: Dim> Filter<D> for InformationState<f64, D>
     where
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>
 {
-    fn observe_innov(&mut self, obs: &LinearUncorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>
+    fn observe_innov(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveNoise<f64, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>
         where DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>
     {
-        let info = self.observe_innovation_un(&obs, s, x)?;
+        let info = self.observe_innovation_un(&obs, noise, s, x)?;
         self.add_information(&info.1);
         Result::Ok(info.0)
     }
 
-    fn observe_linear_special(&mut self, obs: &LinearCorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>
+    fn observe_linear_special(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveCorrelatedNoise<f64, U1, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str>
         where DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>
     {
-        let info = self.observe_innovation_co(obs, s, x)?;
+        let info = self.observe_innovation_co(obs, noise, s, x)?;
         self.add_information(&info.1);
         Result::Ok(info.0)
     }
@@ -138,17 +139,16 @@ impl <D : Dim, XUD : Dim> Filter<D> for UDState<f64, D, XUD>
         println!("{}", self.UD);
     }
 
-    fn observe_innov(&mut self, obs: &LinearUncorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
+    fn observe_innov(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveNoise<f64, U1>, s: &Vector1<f64>, _x: &VectorN<f64, D>) -> Result<f64, &'static str>
         where DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>
     {
-        LinearObservationUncorrelated::observe_innovation(self, obs, s)
+        LinearObservationUncorrelated::observe_innovation(self, obs, noise, s)
     }
 
-    fn observe_linear_special(&mut self, obs: &LinearCorrelatedObserveModel<f64, D, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str> {
+    fn observe_linear_special(&mut self, obs: &LinearObserveModel<f64, D, U1>, noise : &AdditiveCorrelatedNoise<f64, U1, U1>, s: &Vector1<f64>, x: &VectorN<f64, D>) -> Result<f64, &'static str> {
         let z = s + hx(x);
 
-        let mut zz = Matrix1::zeros();
-        self.observe_decorrelate::<U1>(obs, &mut zz, &z)
+        self.observe_decorrelate::<U1,U1>(obs, noise, &z)
     }
 }
 
@@ -181,22 +181,23 @@ fn test_filter<D : Dim>(flt: &mut dyn Filter<D>)
 
     let f_vv: f64 = (-DT * V_GAMMA).exp();
 
-    let additive_noise = AdditiveNoise {
+    let linear_pred_model = LinearPredictModel {
+        Fx: new_copy(d, d,&Matrix2::new(1., DT, 0., f_vv)),
+    };
+    let additive_noise = AdditiveCorrelatedNoise {
         q: Vector1::new(DT * sqr((1. - f_vv) * V_NOISE)),
         G: new_copy(d, U1, &Matrix2x1::new(0.0, 1.0))
     };
 
-    let linear_pred_model = LinearPredictModel {
-        Fx: new_copy(d, d,&Matrix2::new(1., DT, 0., f_vv)),
-    };
-
-    let linrz_un_obs_model = LinearUncorrelatedObserveModel {
+    let linear_obs_model = LinearObserveModel {
         Hx: new_copy(U1, d,&Matrix1x2::new(1.0, 0.0)),
-        Zv: Vector1::new(sqr(OBS_NOISE))
     };
-    let linear_co_obs_model = LinearCorrelatedObserveModel {
-        Hx: new_copy(U1, d,&Matrix1x2::new(1.0, 0.0)),
-        Z: Matrix1::new(sqr(OBS_NOISE))
+    let un_obs_noise = AdditiveNoise {
+        q: Vector1::new(sqr(OBS_NOISE))
+    };
+    let co_obs_noise = AdditiveCorrelatedNoise {
+        G: Matrix1::new(1.0),
+        q: Vector1::new(sqr(OBS_NOISE))
     };
     let z = &Vector1::new(1000.);
 
@@ -218,13 +219,13 @@ fn test_filter<D : Dim>(flt: &mut dyn Filter<D>)
 
         let obs_x = flt.state().unwrap().1.x;
         let s = z - hx(&obs_x);
-        check( flt.observe_innov(&linrz_un_obs_model, &s, &obs_x), "obs").unwrap();
+        check(flt.observe_innov(&linear_obs_model, &un_obs_noise, &s, &obs_x), "obs").unwrap();
     }
     let elapsed = start.elapsed().as_millis();
 
     let obs_x = flt.state().unwrap().1.x;
     let s = z - hx(&obs_x);
-    check( flt.observe_linear_special(&linear_co_obs_model, &s, &obs_x), "obs_linear").unwrap();
+    check(flt.observe_linear_special(&linear_obs_model, &co_obs_noise, &s, &obs_x), "obs_linear").unwrap();
     let xx = flt.state().unwrap().1;println!("final={:.6}{:.6}", xx.x, xx.X);
     println!("{:} ms", elapsed);
 
