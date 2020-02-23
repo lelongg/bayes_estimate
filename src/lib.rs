@@ -13,7 +13,7 @@
 /// Bayes+Estimate is an open source library for Rust. The library implements a wide variety of numerical algorithms for Bayesian estimation of discrete systems.
 ///
 /// Prediction and observation models are represented by a hierarchy of traits that define the estimation operations for different models.
-/// State represention are definied by structs.
+/// State representions are definied by structs.
 /// Estimators implement the models for their state representation and provide numerical implementation of the operations.
 //
 /// # Licensing
