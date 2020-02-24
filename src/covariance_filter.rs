@@ -6,7 +6,8 @@ use na::{RealField, Dim, DimSub, Dynamic, U1, DefaultAllocator, allocator::Alloc
 use na::storage::Storage;
 use crate::models::{LinearEstimator, KalmanState, LinearPredictor, KalmanEstimator, LinearObservationCorrelated, LinearObservationUncorrelated,
                     LinearPredictModel, AdditiveNoise, AdditiveCorrelatedNoise, LinearObserveModel};
-use crate::mine::matrix::{prod_spd, check_positive};
+use crate::mine::matrix;
+use crate::mine::matrix::{check_positive};
 use crate::linalg::cholesky;
 
 
@@ -53,7 +54,9 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for KalmanState<N,
 {
     fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred : VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
         self.x = x_pred;
-        self.X = &pred.Fx * self.X.clone() * pred.Fx.transpose() + prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
+                    // X = Fx.X.FX' + G.q.G'
+        self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
+        matrix::quadform_tr(&mut self.X, N::one(), &noise.G, &noise.q, N::one());
 
         Result::Ok(N::one())
     }
@@ -67,7 +70,9 @@ where
 {
     fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveCorrelatedNoise<N, ZD, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str> {
         let XHt = &self.X * obs.Hx.transpose();
-        let S = &obs.Hx * &XHt + prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
+                    // S = Hx.X.Hx' + G.q.G'
+        let mut S = &obs.Hx * &XHt;
+        matrix::quadform_tr(&mut S, N::one(), &noise.G, &noise.q, N::one());
         let S2 = S.clone();
 
         // Inverse innovation covariance
@@ -78,7 +83,8 @@ where
 
         // State update
         self.x += &W * s;
-        self.X -= prod_spd(&W, &S2);
+                    // X -= W.S.W'
+        self.X.quadform_tr(N::one().neg(), &W, &S2, N::one());
 
         Result::Ok(N::one())
     }

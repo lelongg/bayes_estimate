@@ -10,7 +10,6 @@ use na::base::storage::Storage;
 use crate::models::{LinearEstimator, LinearPredictor, LinearObservationUncorrelated, KalmanState, AdditiveNoise, LinearObserveModel, KalmanEstimator, LinearPredictModel, AdditiveCorrelatedNoise};
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
-use crate::mine::matrix::prod_spd;
 
 
 pub struct UDState<N: RealField, D: Dim, XUD: Dim>
@@ -103,7 +102,9 @@ impl<N: RealField, D : Dim, XUD : Dim> UDState<N, D, XUD>
 		let mut zpdecol = zp.clone();
 
 		// Factorise process noise as GzG'
-		let mut ZZ = prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
+		let z_shape = z.data.shape().0;
+		let mut ZZ = MatrixN::zeros_generic(z_shape, z_shape);
+		matrix::quadform_tr(&mut ZZ, self.udu.one, &noise.G, &noise.q, self.udu.zero);
 		let rcond = self.udu.UdUfactor_variant2(&mut ZZ, z_size);
 		matrix::check_positive(rcond, "Z not PSD in observe")?;
 
