@@ -2,9 +2,9 @@ use std::time::Instant;
 
 use nalgebra as na;
 use na::{RealField, MatrixMN};
-use na::{Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
+use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{DefaultAllocator, allocator::Allocator, U1, U2, U3};
-use na::{Dim, Dynamic, VectorN};
+use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
 use na::base::storage::{Storage};
 use na::base::constraint::{ShapeConstraint, SameNumberOfRows, SameNumberOfColumns};
 
@@ -131,9 +131,9 @@ impl <D: Dim> Filter<D> for InformationState<f64, D>
     }
 }
 
-impl <D : Dim, XUD : Dim> Filter<D> for UDState<f64, D, XUD>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D, XUD> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f64, XUD>,
-          DefaultAllocator : Allocator<usize, D, XUD>
+impl <D : DimAdd<U1>> Filter<D> for UDState<f64, D, DimSum<D,U1>>
+    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f64, D, DimSum<D,U1>> + Allocator<f64, DimSum<D, U1>>
+          + Allocator<usize, D, DimSum<D, U1>>,
 {
     fn trace_state(&self) {
         println!("{}", self.UD);
@@ -171,7 +171,6 @@ fn test_filter<D : Dim>(flt: &mut dyn Filter<D>)
     where
         ShapeConstraint: SameNumberOfRows<U2, D> + SameNumberOfColumns<U2, D>,
         ShapeConstraint: SameNumberOfRows<D, U2> + SameNumberOfColumns<D, U2>,
-        ShapeConstraint: SameNumberOfRows<U2, U2> + SameNumberOfColumns<U2, U2>,
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
             + Allocator<f64, U1, D> + Allocator<f64, D, U1> + Allocator<f64, U1> + Allocator<f64, U2, U2>
             + Allocator<usize, D, D> + Allocator<usize, D>
@@ -245,13 +244,13 @@ fn expect(state : KalmanState<f64, U2>)
 }
 
 
-fn new_copy<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim>(r : R, c : C, m : &MatrixMN<N, R1, C1>) -> MatrixMN<N,R,C>
+fn new_copy<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim, S1: Storage<N, R1, C1>>(r : R, c : C, m : &Matrix<N, R1, C1, S1>) -> MatrixMN<N,R,C>
     where
-        DefaultAllocator: Allocator<N, R1, C1> + Allocator<N, R, C>,
+        DefaultAllocator: Allocator<N, R, C>,
         ShapeConstraint: SameNumberOfRows<R, R1> + SameNumberOfColumns<C, C1>
 {
     let mut zeroed = MatrixMN::<N,R,C>::zeros_generic(r, c);
-    zeroed.copy_from(&m);
+    zeroed.copy_from(m);
     zeroed
 }
 

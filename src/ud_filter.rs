@@ -4,7 +4,7 @@ use nalgebra as na;
 
 use na::{RealField, Dim};
 use na::{DefaultAllocator, allocator::Allocator};
-use na::{U1, Dynamic, DMatrix, MatrixMN, MatrixN, VectorN};
+use na::{U1, Dynamic, DimAdd, DimSum, DMatrix, MatrixMN, MatrixN, VectorN};
 use na::base::storage::Storage;
 
 use crate::models::{LinearEstimator, LinearPredictor, LinearObservationUncorrelated, KalmanState, AdditiveNoise, LinearObserveModel, KalmanEstimator, LinearPredictModel, AdditiveCorrelatedNoise};
@@ -184,8 +184,8 @@ impl<N: RealField, D: Dim, XUD : Dim> KalmanEstimator<N, D> for UDState<N, D, XU
 	}
 }
 
-impl<N: RealField, D : Dim, QD : Dim, XUD : Dim> LinearPredictor<N, D, QD> for UDState<N, D, XUD>
-	where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, QD> + Allocator<N, XUD>
+impl<N: RealField, D : DimAdd<QD>, QD : Dim> LinearPredictor<N, D, QD> for UDState<N, D, DimSum<D, QD>>
+	where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D, DimSum<D, QD>> + Allocator<N, D> + Allocator<N, QD> + Allocator<N, DimSum<D, QD>>
 {
 	fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
 		let mut scratch = self.new_predict_scratch();
@@ -193,10 +193,10 @@ impl<N: RealField, D : Dim, QD : Dim, XUD : Dim> LinearPredictor<N, D, QD> for U
 	}
 }
 
-impl<N: RealField, D : Dim, XUD : Dim, ZD : Dim, ZQD : Dim> LinearObservationUncorrelated<N, D, ZD, ZQD> for UDState<N, D, XUD>
+impl<N: RealField, D : DimAdd<ZQD>, ZD : Dim, ZQD : Dim> LinearObservationUncorrelated<N, D, ZD, ZQD> for UDState<N, D, DimSum<D, ZQD>>
 	where DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
 		+ Allocator<N, ZD, ZQD> + Allocator<N, ZQD>
-		+ Allocator<N, D, XUD>  + Allocator<N, XUD>
+		+ Allocator<N, D, DimSum<D, ZQD>>  + Allocator<N, DimSum<D, ZQD>>
 {
 	/* Standard linrz observe
      *  Uncorrelated observations are applied sequentially in the order they appear in z
