@@ -1,4 +1,4 @@
-use nalgebra::{RealField, Dim, VectorN, MatrixMN, DefaultAllocator, allocator::Allocator};
+use nalgebra::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, RealField, VectorN};
 
 /**
  * Numerical comparison of reciprocal condition numbers
@@ -23,8 +23,8 @@ use nalgebra::{RealField, Dim, VectorN, MatrixMN, DefaultAllocator, allocator::A
  *   a factorisation producing special values in D (e.g. -infinity,NaN etc)
  *  By definition rcond <= 1 as min<=max
  */
-pub fn rcond_vec<N : RealField, R : Dim>(dv: &VectorN<N,R>) -> N
-    where DefaultAllocator : Allocator<N,R>
+pub fn rcond_vec<N: RealField, R: Dim>(dv: &VectorN<N, R>) -> N
+    where DefaultAllocator: Allocator<N, R>
 {
     // Special case an empty matrix
     let n = dv.nrows();
@@ -53,19 +53,19 @@ pub fn rcond_vec<N : RealField, R : Dim>(dv: &VectorN<N,R>) -> N
     }
 }
 
-pub fn rcond_symetric<N : RealField, R : Dim, C : Dim>(sm: &MatrixMN<N,R,C>) -> N
-    where DefaultAllocator : Allocator<N,R,C>
+pub fn rcond_symetric<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
+    where DefaultAllocator: Allocator<N, R, C>
 {
     // Special case an empty matrix
     let n = sm.nrows();
     if n == 0 {
         N::zero()
     } else {
-        let mut mind = sm[(0,0)];
+        let mut mind = sm[(0, 0)];
         let mut maxd = mind;
 
         for i in 0..n {
-            let d = sm[(i,i)];
+            let d = sm[(i, i)];
             if d != d {
                 // NaN
                 mind = N::one().neg();
@@ -87,19 +87,19 @@ pub fn rcond_symetric<N : RealField, R : Dim, C : Dim>(sm: &MatrixMN<N,R,C>) -> 
  * Same as rcond_internal except that elements are infinity are ignored
  * when determining the maximum element.
  */
-pub fn rcond_ignore_infinity<N : RealField, R : Dim, C : Dim>(sm: &MatrixMN<N,R,C>) -> N
-    where DefaultAllocator : Allocator<N,R,C>
+pub fn rcond_ignore_infinity<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
+    where DefaultAllocator: Allocator<N, R, C>
 {
     // Special case an empty matrix
     let n = sm.nrows();
     if n == 0 {
         N::zero()
     } else {
-        let mut mind = sm[(0,0)];
+        let mut mind = sm[(0, 0)];
         let mut maxd = N::zero();
 
         for i in 0..n {
-            let d = sm[(i,i)];
+            let d = sm[(i, i)];
             if d != d {
                 // NaN
                 mind = N::one().neg();

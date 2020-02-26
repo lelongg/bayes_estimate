@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
+use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, RealField, U1, VectorN};
+use na::base::storage::Storage;
 use nalgebra as na;
 
-use na::{RealField, Dim, U1, DefaultAllocator, allocator::Allocator, MatrixMN, MatrixN, VectorN};
-use na::base::storage::Storage;
-use crate::models::{LinearEstimator, KalmanState, InformationState, LinearPredictor, LinearPredictModel, AdditiveNoise, LinearObserveModel, KalmanEstimator, AdditiveCorrelatedNoise};
-use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
 use crate::linalg::cholesky::UDU;
+use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearEstimator, LinearObserveModel, LinearPredictModel, LinearPredictor};
 
 /// Information filter.
 ///
@@ -27,10 +27,10 @@ use crate::linalg::cholesky::UDU;
 impl<N: RealField, D: Dim> InformationState<N, D>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    pub fn new(d : D) -> InformationState<N, D> {
+    pub fn new(d: D) -> InformationState<N, D> {
         InformationState {
             i: VectorN::zeros_generic(d, U1),
-            I: MatrixN::zeros_generic(d, d)
+            I: MatrixN::zeros_generic(d, d),
         }
     }
 
@@ -48,7 +48,7 @@ impl<N: RealField, D: Dim> LinearEstimator<N> for InformationState<N, D>
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    fn init(&mut self, state : &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         // Information
         self.I = state.X.clone();
         let rcond = UDU::new().UdUinversePD(&mut self.I);
@@ -67,7 +67,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>
         // State
         let x = &X * &self.i;
 
-        Result::Ok((rcond, KalmanState{x, X}))
+        Result::Ok((rcond, KalmanState { x, X }))
     }
 }
 
@@ -76,7 +76,7 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationSta
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D>
         + Allocator<N, D> + Allocator<N, QD>
 {
-    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred : VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
+    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
@@ -86,11 +86,11 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationSta
         X = prod_spd(&pred.Fx, &X);
         X += prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
 
-        self.init(&KalmanState{x: x_pred, X})
+        self.init(&KalmanState { x: x_pred, X })
     }
 }
 
-impl<N: RealField, D : Dim> InformationState<N, D>
+impl<N: RealField, D: Dim> InformationState<N, D>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     /* Linear information predict
@@ -103,7 +103,7 @@ impl<N: RealField, D : Dim> InformationState<N, D>
      * particular care to avoid invertibility requirements for the noise and noise coupling g,Q
      * Therefore both zero noises and zeros in the couplings can be used
      */
-    pub fn predict_linear_invertable<QD : Dim>(&mut self, pred_inv: &LinearPredictModel<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str>
+    pub fn predict_linear_invertable<QD: Dim>(&mut self, pred_inv: &LinearPredictModel<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str>
         where DefaultAllocator: Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>
     {
         let I_shape = self.I.data.shape();
@@ -115,7 +115,7 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         for i in 0..noise.q.nrows()
         {
             if noise.q[i] < N::zero() {    // allow PSD q, let infinity propagate into B
-             return Result::Err("q not PSD");
+                return Result::Err("q not PSD");
             }
             B[(i, i)] += N::one() / noise.q[i];
         }
@@ -137,19 +137,19 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         Result::Ok(rcond)
     }
 
-    pub fn add_information(&mut self, information : &InformationState<N, D>) {
+    pub fn add_information(&mut self, information: &InformationState<N, D>) {
         self.i += &information.i;
         self.I += &information.I;
     }
 
-    pub fn observe_innovation_co<ZD : Dim, ZQD : Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveCorrelatedNoise<N, ZD, ZQD>,
-                                                      s: &VectorN<N, ZD>, x: &VectorN<N, D>) -> Result<(N, InformationState<N, D>), &'static str>
+    pub fn observe_innovation_co<ZD: Dim, ZQD: Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+                                                    s: &VectorN<N, ZD>, x: &VectorN<N, D>) -> Result<(N, InformationState<N, D>), &'static str>
         where
             DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD>
             + Allocator<N, ZQD, ZQD> + Allocator<N, ZQD, ZD> + Allocator<N, ZD, ZQD>
             + Allocator<N, ZD> + Allocator<N, ZQD>
     {
-        let zz = s + &obs.Hx * x;		// Strange EIF observation object
+        let zz = s + &obs.Hx * x;        // Strange EIF observation object
 
         // Observation Information, TODO use inverse directly on q, D factors
         let mut ZI = prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
@@ -160,22 +160,22 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         // Calculate EIF i = Hx'*ZI*zz
         let i = &HxTZI * zz;
         // Calculate EIF I = Hx'*ZI*Hx
-        let I = &HxTZI * &obs.Hx;				// use column matrix trans(HxT)
+        let I = &HxTZI * &obs.Hx;                // use column matrix trans(HxT)
 
-        Result::Ok((rcond, InformationState{i, I}))
+        Result::Ok((rcond, InformationState { i, I }))
     }
 
-     pub fn observe_innovation_un<ZD : Dim, ZQD : Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>, x: &VectorN<N, D>)
-                                            -> Result<(N, InformationState<N, D>), &'static str>
-         where
-             DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD> + Allocator<N, ZQD>
-     {
-        let zz = s + &obs.Hx * x;		// Strange EIF observation object
+    pub fn observe_innovation_un<ZD: Dim, ZQD: Dim>(&self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>, x: &VectorN<N, D>)
+                                                    -> Result<(N, InformationState<N, D>), &'static str>
+        where
+            DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD> + Allocator<N, ZQD>
+    {
+        let zz = s + &obs.Hx * x;        // Strange EIF observation object
 
         // Observation Information
         let rcond = UDU::UdUrcond_vec(&noise.q);
         check_positive(rcond, "Zv not PD")?;
-                                                // HxTZI = Hx'*inverse(Z)
+        // HxTZI = Hx'*inverse(Z)
         let mut HxTZI = obs.Hx.transpose();
         for w in 0..noise.q.nrows() {
             let mut HxTZI_w = HxTZI.column_mut(w);
@@ -185,8 +185,8 @@ impl<N: RealField, D : Dim> InformationState<N, D>
         // Calculate EIF i = Hx'*ZI*zz
         let i = &HxTZI * zz;
         // Calculate EIF I = Hx'*ZI*Hx
-        let I = &HxTZI * &obs.Hx;				// use column matrix trans(HxT)
+        let I = &HxTZI * &obs.Hx;                // use column matrix trans(HxT)
 
-        Result::Ok((rcond, InformationState{i, I}))
+        Result::Ok((rcond, InformationState { i, I }))
     }
 }

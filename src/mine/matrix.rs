@@ -1,9 +1,7 @@
-use nalgebra as na;
-
-use na::{RealField, Dim, DefaultAllocator, allocator::Allocator, Matrix, Vector, Scalar, MatrixN, MatrixMN, SquareMatrix};
+use na::{allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, MatrixN, RealField, Scalar, SquareMatrix, Vector};
 use na::storage::{Storage, StorageMut};
-use nalgebra::constraint::{ShapeConstraint, DimEq};
-
+use nalgebra as na;
+use nalgebra::constraint::{DimEq, ShapeConstraint};
 
 /// Computes the quadratic form `self = alpha * lhs * mid * lhs.transpose() + beta * self`.
 ///

@@ -1,16 +1,14 @@
 #![allow(non_snake_case)]
 
+use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
+use na::RealField;
+use na::storage::Storage;
 /// Bayesian estimation models.
 ///
 /// Defines a hierarchy of traits that model discrete systems estimation operations.
 /// State representions are definied by structs
 
 use nalgebra as na;
-
-use na::RealField;
-use na::{DefaultAllocator, allocator::Allocator, Dim, MatrixMN, MatrixN, VectorN};
-use na::storage::Storage;
-
 
 /// Kalman State.
 /// Linear respresentation as a state vector and the state covariance (Symetric Positive Definate) matrix.
@@ -21,7 +19,7 @@ pub struct KalmanState<N: RealField, D: Dim>
     /// state vector
     pub x: VectorN<N, D>,
     /// state covariance Symetric Positive Definate Matrix
-    pub X: MatrixN<N, D>
+    pub X: MatrixN<N, D>,
 }
 
 /// Information State.
@@ -35,7 +33,7 @@ pub struct InformationState<N: RealField, D: Dim>
     pub i: VectorN<N, D>,
     /// Symetric Positive Definate infromation matrix
 
-    pub I: MatrixN<N, D>
+    pub I: MatrixN<N, D>,
 }
 
 /// A Kalman filter (estimator).
@@ -44,7 +42,7 @@ pub trait KalmanEstimator<N: RealField, D: Dim>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     /// Initialise the estimator with a KalmanState.
-    fn init(&mut self, state : &KalmanState<N, D>) -> Result<N, &'static str>;
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
 
     // The estimator estimate of the systems KalmanState.
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
@@ -59,7 +57,7 @@ pub trait LinearEstimator<N: RealField>
 /// A linear predictor.
 ///
 /// Linear or linearised prediction model with additive noise.
-pub trait LinearPredictor<N: RealField, D: Dim, QD: Dim> : LinearEstimator<N>
+pub trait LinearPredictor<N: RealField, D: Dim, QD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D> + Allocator<N, QD>
 {
     fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str>;
@@ -68,19 +66,19 @@ pub trait LinearPredictor<N: RealField, D: Dim, QD: Dim> : LinearEstimator<N>
 /// A linear observation.
 ///
 /// Linear or linearised observation model with uncorrelated obseration noise.
-pub trait LinearObservationUncorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> : LinearEstimator<N>
+pub trait LinearObservationUncorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>
 {
-    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>;
+    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>;
 }
 
 /// A linear observation.
 ///
 /// Linear or linearised observation model with ccorrelated obseration noise.
-pub trait LinearObservationCorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> : LinearEstimator<N>
+pub trait LinearObservationCorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>
 {
-    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise : &AdditiveCorrelatedNoise<N, ZD, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>;
+    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>;
 }
 
 /// Additive noise.
@@ -104,7 +102,7 @@ pub struct AdditiveCorrelatedNoise<N: RealField, D: Dim, QD: Dim>
     /// Noise variance
     pub q: VectorN<N, QD>,
     // Noise coupling
-    pub G: MatrixMN<N, D, QD>
+    pub G: MatrixMN<N, D, QD>,
 }
 
 /// Linear prediction model.
@@ -128,14 +126,14 @@ pub struct LinearObserveModel<N: RealField, D: Dim, ZD: Dim>
 }
 
 
-impl <'a, N: RealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise< N, D, QD>
+impl<'a, N: RealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise<N, D, QD>
     where
         DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>
 {
-    pub fn from_uncorrelated(uncorrelated : &'a AdditiveNoise<N, QD>, d_dim : D) -> Self {
+    pub fn from_uncorrelated(uncorrelated: &'a AdditiveNoise<N, QD>, d_dim: D) -> Self {
         AdditiveCorrelatedNoise {
             G: MatrixMN::identity_generic(d_dim, uncorrelated.q.data.shape().0),
-            q: uncorrelated.q.clone()
+            q: uncorrelated.q.clone(),
         }
     }
 }
