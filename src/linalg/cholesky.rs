@@ -1,10 +1,18 @@
-/*
- * Bayes++ the Bayesian Filtering Library
- * Copyright (c) 2020 Michael Stevens
- * See accompanying Bayes++.htm for terms and conditions of use.
- */
-
 #![allow(non_snake_case)]
+
+//! Linear algebra support functions.
+//!
+//! Cholesky and Modified Cholesky factorisations.
+//! UdU' and LdL' factorisations of Positive semi-definite matrices. Where:
+//! U is unit upper triangular
+//! d is diagonal
+//! L is unit lower triangular
+//!
+//! Storage
+//! UD(RowMatrix) format of UdU' factor
+//! strict_upper_triangle(UD) = strict_upper_triangle(U), diagonal(UD) = d, strict_lower_triangle(UD) ignored or zeroed
+//! LD(LTriMatrix) format of LdL' factor
+//! strict_lower_triangle(LD) = strict_lower_triangle(L), diagonal(LD) = d, strict_upper_triangle(LD) ignored or zeroed
 
 use na::{Dim, MatrixMN, RealField, VectorN};
 use na::{allocator::Allocator, DefaultAllocator};
@@ -27,20 +35,6 @@ impl<N: RealField> UDU<N> {
         }
     }
 
-    /*
-     * Linear algebra support functions for filter classes
-     * Cholesky and Modified Cholesky factorisations
-     *
-     * UdU' and LdL' factorisations of Positive semi-definite matrices. Where
-     *  U is unit upper triangular
-     *  d is diagonal
-     *  L is unit lower triangular
-     * Storage
-     *  UD(RowMatrix) format of UdU' factor
-     *   strict_upper_triangle(UD) = strict_upper_triangle(U), diagonal(UD) = d, strict_lower_triangle(UD) ignored or zeroed
-     *  LD(LTriMatrix) format of LdL' factor
-     *   strict_lower_triangle(LD) = strict_lower_triangle(L), diagonal(LD) = d, strict_upper_triangle(LD) ignored or zeroed
-     */
 
 
     /* Estimate the reciprocal condition number for inversion of the original PSD

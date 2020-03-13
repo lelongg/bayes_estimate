@@ -11,8 +11,7 @@
 //! A fundamental property of the Information state is that Information is additive. So if there is more information
 //! about the system (such as by an observation) this can simply be added to i,I Information state.
 //!
-//! The linear information state representation can also be used for non-linear system by using linearised
-//! forms of the system model.
+//! The linear information state representation can also be used for non-linear system by using linearised forms of the system model.
 //!
 //! [`InformationState`]: ../models/struct.InformationState.html
 

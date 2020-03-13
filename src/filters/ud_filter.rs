@@ -1,5 +1,17 @@
 #![allow(non_snake_case)]
 
+//! UD 'square root' filter.
+//!
+//! A Bayesian filter that uses a 'square root' factorisation of the Kalman state representation [`KalmanState`] of the system for filtering.
+//!
+//! The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and
+//! d is a diagonal vector.
+//! Numerically the this 'square root' factorisation is advantagous as condition of when inverting is improved by the square root.
+//!
+//! The linear representation can also be used for non-linear system by using linearised forms of the system model.
+//!
+//! [`KalmanState`]: ../models/struct.KalmanState.html
+
 use na::{Dim, RealField};
 use na::{allocator::Allocator, DefaultAllocator};
 use na::{DimAdd, DimSum, DMatrix, Dynamic, MatrixMN, MatrixN, U1, VectorN};
@@ -10,15 +22,117 @@ use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearEstimator, LinearObservationUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor};
 
+/// UD State representation.
+///
+/// Linear respresentation as a state vector and 'square root' factorisation of the state covariance matrix.
+///
+/// The state covariance X is factorised with a modified Cholesky factorisation so U.d.U' == X, where U is upper triangular matrix (0 diagonal) and
+/// d is a diagonal vector. U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
 pub struct UDState<N: RealField, D: Dim, XUD: Dim>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
 {
+    /// State vector
     pub x: VectorN<N, D>,
+    /// UD matrix representation of state covariance
     pub UD: MatrixMN<N, D, XUD>,
+    // UDU instance for factorisations
     udu: UDU<N>,
 }
 
+
+impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
+    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>
+{
+    /// Create a UDState for given state dimensions.
+    ///
+    /// d is the size of states vector and rows in UD.
+    ///
+    /// xud is the number of columns in UD. This will be large then d to accomdate the matrix
+    /// dimensions of the prediction model. The extra columns are used for the prediction computation.
+    pub fn new(d: D, xud: XUD) -> Self {
+        assert!(xud.value() >= d.value(), "xud must be >= d");
+
+        UDState {
+            UD: MatrixMN::<N, D, XUD>::zeros_generic(d, xud),
+            x: VectorN::zeros_generic(d, U1),
+            udu: UDU::new(),
+        }
+    }
+}
+
+
+// Provide Allocators for LinearEstimator.
+impl<N: RealField, D: Dim, XUD: Dim> LinearEstimator<N> for UDState<N, D, XUD>
+    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
+{}
+
+
+impl<N: RealField, D: Dim, XUD: Dim> KalmanEstimator<N, D> for UDState<N, D, XUD>
+    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
+{
+    /// Initialise the UDState with a KalmanState.
+    ///
+    /// The covariance matrix X is factorised into a U.d.U' as a UD matrix.
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+        self.x = state.x.clone();
+
+        // Factorise X into UD
+        let rows = self.UD.nrows();
+        matrix::copy_from(&mut self.UD.columns_mut(0, rows), &state.X);
+        let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
+        matrix::check_positive(rcond, "X not PD")?;
+
+        Result::Ok(self.udu.one)
+    }
+
+    /// Derive the KalmanState from the UDState.
+    ///
+    /// The covariance matrix X is recomposed from U.d.U' in the UD matrix.
+    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+        // assign elements of common left block of M into X
+        let x_shape = self.x.data.shape().0;
+        let mut X = matrix::as_zeros((x_shape, x_shape));
+        matrix::copy_from(&mut X, &self.UD.columns(0, self.UD.nrows()));
+        UDU::UdUrecompose(&mut X);
+
+        Result::Ok((self.udu.one, KalmanState { x: self.x.clone(), X }))
+    }
+}
+
+impl<N: RealField, D: DimAdd<QD>, QD: Dim> LinearPredictor<N, D, QD> for UDState<N, D, DimSum<D, QD>>
+    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D, DimSum<D, QD>> + Allocator<N, D> + Allocator<N, QD> + Allocator<N, DimSum<D, QD>>
+{
+    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
+        let mut scratch = self.new_predict_scratch();
+        self.predict_use_scratch(&mut scratch, pred, x_pred, noise)
+    }
+}
+
+impl<N: RealField, D: DimAdd<ZQD>, ZD: Dim, ZQD: Dim> LinearObservationUncorrelated<N, D, ZD, ZQD> for UDState<N, D, DimSum<D, ZQD>>
+    where DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
+    + Allocator<N, ZD, ZQD> + Allocator<N, ZQD>
+    + Allocator<N, D, DimSum<D, ZQD>> + Allocator<N, DimSum<D, ZQD>>
+{
+    /* Standard linrz observe
+     *  Uncorrelated observations are applied sequentially in the order they appear in z
+     *  The sequential observation updates state x
+     *  Therefore the model of each observation needs to be computed sequentially. Generally this
+     *  is inefficient and observe (UD_sequential_observe_model&) should be used instead
+     * Return: Minimum rcond of all sequential observe
+     */
+    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str> {
+        let mut scratch = self.new_observe_scratch();
+
+        // Predict UD from model
+        UDState::observe_innovation_use_scratch(self, &mut scratch, obs, noise, s)
+    }
+}
+
+
+/// Prediction Scratch.
+///
+/// Provides temporary variables for prediction calculation.
 pub struct PredictScratch<N: RealField, XUD: Dim>
     where DefaultAllocator: Allocator<N, XUD>
 {
@@ -149,82 +263,6 @@ impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
             self.x += &scratch.w * s;
         }
         Result::Ok(rcondmin)
-    }
-}
-
-impl<N: RealField, D: Dim, XUD: Dim> LinearEstimator<N> for UDState<N, D, XUD>
-    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
-{}
-
-impl<N: RealField, D: Dim, XUD: Dim> KalmanEstimator<N, D> for UDState<N, D, XUD>
-    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
-{
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
-        self.x = state.x.clone();
-
-        // Factorise X into UD
-        let rows = self.UD.nrows();
-        matrix::copy_from(&mut self.UD.columns_mut(0, rows), &state.X);
-        let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
-        matrix::check_positive(rcond, "X not PD")?;
-
-        Result::Ok(self.udu.one)
-    }
-
-    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        // assign elements of common left block of M into X
-        let x_shaoe = self.x.data.shape().0;
-        let mut X = matrix::as_zeros((x_shaoe, x_shaoe));
-        matrix::copy_from(&mut X, &self.UD.columns(0, self.UD.nrows()));
-        UDU::UdUrecompose(&mut X);
-
-        Result::Ok((self.udu.one, KalmanState { x: self.x.clone(), X }))
-    }
-}
-
-impl<N: RealField, D: DimAdd<QD>, QD: Dim> LinearPredictor<N, D, QD> for UDState<N, D, DimSum<D, QD>>
-    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D, DimSum<D, QD>> + Allocator<N, D> + Allocator<N, QD> + Allocator<N, DimSum<D, QD>>
-{
-    fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str> {
-        let mut scratch = self.new_predict_scratch();
-        self.predict_use_scratch(&mut scratch, pred, x_pred, noise)
-    }
-}
-
-impl<N: RealField, D: DimAdd<ZQD>, ZD: Dim, ZQD: Dim> LinearObservationUncorrelated<N, D, ZD, ZQD> for UDState<N, D, DimSum<D, ZQD>>
-    where DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
-    + Allocator<N, ZD, ZQD> + Allocator<N, ZQD>
-    + Allocator<N, D, DimSum<D, ZQD>> + Allocator<N, DimSum<D, ZQD>>
-{
-    /* Standard linrz observe
-     *  Uncorrelated observations are applied sequentially in the order they appear in z
-     *  The sequential observation updates state x
-     *  Therefore the model of each observation needs to be computed sequentially. Generally this
-     *  is inefficient and observe (UD_sequential_observe_model&) should be used instead
-     * Precond:
-     *	 Zv is PSD
-     * Postcond:
-     *  UD is PSD
-     * Return: Minimum rcond of all sequential observe
-     */
-    fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str> {
-        let mut scratch = self.new_observe_scratch();
-
-        // Predict UD from model
-        UDState::observe_innovation_use_scratch(self, &mut scratch, obs, noise, s)
-    }
-}
-
-
-impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
-    where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>
-{
-    pub fn new(d: D, xud: XUD) -> Self {
-        UDState {
-            UD: MatrixMN::<N, D, XUD>::zeros_generic(d, xud),
-            x: VectorN::zeros_generic(d, U1),
-            udu: UDU::new(),
-        }
     }
 }
 

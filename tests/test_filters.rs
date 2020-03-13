@@ -11,7 +11,7 @@ use na::base::constraint::{ShapeConstraint, SameNumberOfRows, SameNumberOfColumn
 use bayes_filter as bf;
 use bf::models::{LinearPredictor, LinearEstimator, KalmanEstimator, LinearObservationUncorrelated, LinearObservationCorrelated};
 use bf::models::{KalmanState, InformationState, AdditiveNoise, LinearPredictModel, LinearObserveModel};
-use bf::ud_filter::UDState;
+use bf::filters::ud_filter::UDState;
 
 use approx;
 use bayes_filter::models::AdditiveCorrelatedNoise;

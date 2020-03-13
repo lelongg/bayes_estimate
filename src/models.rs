@@ -12,7 +12,7 @@ use nalgebra as na;
 
 /// Kalman State.
 ///
-/// Linear respresentation as a state vector and the state covariance (Symetric Positive Definate) matrix.
+/// Linear respresentation as a state vector and the state covariance (symetric positive semidefinate) matrix.
 #[derive(PartialEq, Clone)]
 pub struct KalmanState<N: RealField, D: Dim>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
@@ -25,7 +25,7 @@ pub struct KalmanState<N: RealField, D: Dim>
 
 /// Information State.
 ///
-/// Linear respresentation as a information state vector and the information (Symetric Positive Definate) matrix .
+/// Linear respresentation as a information state vector and the information (symetric positive semidefinate) matrix.
 #[derive(PartialEq, Clone)]
 pub struct InformationState<N: RealField, D: Dim>
     where
@@ -46,7 +46,7 @@ pub trait KalmanEstimator<N: RealField, D: Dim>
     /// Initialise the estimator with a KalmanState.
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
 
-    /// The estimator estimate of the systems KalmanState.
+    /// The estimator's estimate of the system's KalmanState.
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
