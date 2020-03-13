@@ -1,13 +1,13 @@
 #![allow(non_snake_case)]
 
+//! Bayesian estimation models.
+//!
+//! Defines a hierarchy of traits that model discrete systems estimation operations.
+//! State representions are definied by structs
+
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
 use na::RealField;
 use na::storage::Storage;
-/// Bayesian estimation models.
-///
-/// Defines a hierarchy of traits that model discrete systems estimation operations.
-/// State representions are definied by structs
-
 use nalgebra as na;
 
 /// Kalman State.
@@ -18,7 +18,7 @@ pub struct KalmanState<N: RealField, D: Dim>
 {
     /// state vector
     pub x: VectorN<N, D>,
-    /// state covariance Symetric Positive Definate Matrix
+    /// state covariance matrix (symetric positive semidefinate)
     pub X: MatrixN<N, D>,
 }
 
@@ -31,8 +31,7 @@ pub struct InformationState<N: RealField, D: Dim>
 {
     /// information state vector
     pub i: VectorN<N, D>,
-    /// Symetric Positive Definate infromation matrix
-
+    /// information matrix (symetric positive semidefinate)
     pub I: MatrixN<N, D>,
 }
 
@@ -44,7 +43,7 @@ pub trait KalmanEstimator<N: RealField, D: Dim>
     /// Initialise the estimator with a KalmanState.
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
 
-    // The estimator estimate of the systems KalmanState.
+    /// The estimator estimate of the systems KalmanState.
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
@@ -101,7 +100,7 @@ pub struct AdditiveCorrelatedNoise<N: RealField, D: Dim, QD: Dim>
 {
     /// Noise variance
     pub q: VectorN<N, QD>,
-    // Noise coupling
+    /// Noise coupling
     pub G: MatrixMN<N, D, QD>,
 }
 
@@ -111,7 +110,7 @@ pub struct AdditiveCorrelatedNoise<N: RealField, D: Dim, QD: Dim>
 pub struct LinearPredictModel<N: RealField, D: Dim>
     where DefaultAllocator: Allocator<N, D, D>
 {
-    // State tramsition matrix
+    /// State tramsition matrix
     pub Fx: MatrixN<N, D>
 }
 
@@ -121,7 +120,7 @@ pub struct LinearPredictModel<N: RealField, D: Dim>
 pub struct LinearObserveModel<N: RealField, D: Dim, ZD: Dim>
     where DefaultAllocator: Allocator<N, ZD, D>
 {
-    // Observation matrix
+    /// Observation matrix
     pub Hx: MatrixMN<N, ZD, D>
 }
 
@@ -130,6 +129,9 @@ impl<'a, N: RealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise<N, D, QD>
     where
         DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>
 {
+    /// Creates a AdditiveCorrelatedNoise from an AdditiveNoise.
+    ///
+    /// d-dim defines the 'D' dimension of the noise coupling matrix 'G'.
     pub fn from_uncorrelated(uncorrelated: &'a AdditiveNoise<N, QD>, d_dim: D) -> Self {
         AdditiveCorrelatedNoise {
             G: MatrixMN::identity_generic(d_dim, uncorrelated.q.data.shape().0),

@@ -1,5 +1,20 @@
 #![allow(non_snake_case)]
 
+//! Information filter.
+//!
+//! A Bayesian filter that uses a linear information representation of the system for filtering.
+//! The information state is simply the i,I pair where i is a vector and I a PSD matrix, the dimensions
+//! of both are the dimensions of the system.
+//!
+//! The Kalman state and Information state are equivilent:
+//! I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
+//!
+//! A fundamental property of the Information state is that Information is additive. So if there is more information
+//! about the system (such as by an observation) this can simply be added to i,I Information state.
+//!
+//! This linear information state representation can also be use for non-linear system by using linearised
+//! forms of the system model.
+
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, RealField, U1, VectorN};
 use na::base::storage::Storage;
 use nalgebra as na;
@@ -8,21 +23,6 @@ use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearEstimator, LinearObserveModel, LinearPredictModel, LinearPredictor};
 
-/// Information filter.
-///
-/// A Bayesian filter that uses a linear information repesentation of the system for filtering.
-/// The information state is simply the i,I pair where i is a vector and I a PSD matrix, the dimensions
-/// of both are the dimensions of the system.
-///
-/// The Kalman state and Information state are equivilent:
-/// I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
-///
-/// A fundenmental property of the Information state is that Information is addative. So if there is more information
-/// about the system (such as by an observeration) this can simply be added to i,I Information state.
-///
-/// This linear information state representation can also be use for non-linear system by using linearised
-/// forms of the system model.
-///
 
 impl<N: RealField, D: Dim> InformationState<N, D>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
