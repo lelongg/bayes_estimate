@@ -11,31 +11,34 @@ use na::storage::Storage;
 use nalgebra as na;
 
 /// Kalman State.
+///
 /// Linear respresentation as a state vector and the state covariance (Symetric Positive Definate) matrix.
 #[derive(PartialEq, Clone)]
 pub struct KalmanState<N: RealField, D: Dim>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    /// state vector
+    /// State vector
     pub x: VectorN<N, D>,
-    /// state covariance matrix (symetric positive semidefinate)
+    /// State covariance matrix (symetric positive semidefinate)
     pub X: MatrixN<N, D>,
 }
 
 /// Information State.
+///
 /// Linear respresentation as a information state vector and the information (Symetric Positive Definate) matrix .
 #[derive(PartialEq, Clone)]
 pub struct InformationState<N: RealField, D: Dim>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    /// information state vector
+    /// Information state vector
     pub i: VectorN<N, D>,
-    /// information matrix (symetric positive semidefinate)
+    /// Information matrix (symetric positive semidefinate)
     pub I: MatrixN<N, D>,
 }
 
 /// A Kalman filter (estimator).
+///
 /// The linear Kalman state representation x,X is used to represent the system.
 pub trait KalmanEstimator<N: RealField, D: Dim>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
@@ -55,25 +58,30 @@ pub trait LinearEstimator<N: RealField>
 
 /// A linear predictor.
 ///
-/// Linear or linearised prediction model with additive noise.
+/// Uses a Linear model with additive noise.
 pub trait LinearPredictor<N: RealField, D: Dim, QD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D> + Allocator<N, QD>
 {
+    /// State prediction with a linear prediction model and additive noise.
     fn predict(&mut self, pred: &LinearPredictModel<N, D>, x_pred: VectorN<N, D>, noise: &AdditiveCorrelatedNoise<N, D, QD>) -> Result<N, &'static str>;
 }
 
-/// A linear observation.
+/// A linear observation with uncorrelated observation noise.
 ///
-/// Linear or linearised observation model with uncorrelated obseration noise.
+/// Uses a Linear observation model with uncorrelated additive observation noise.
 pub trait LinearObservationUncorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>
 {
+    /// State observation with a linear observation model, additive observation noise and
+    /// the observation innovation.
+    ///
+    /// The observation innovation is the difference between the observation and the predicted observation.
     fn observe_innovation(&mut self, obs: &LinearObserveModel<N, D, ZD>, noise: &AdditiveNoise<N, ZQD>, s: &VectorN<N, ZD>) -> Result<N, &'static str>;
 }
 
-/// A linear observation.
+/// A linear observation with correlated observation noise.
 ///
-/// Linear or linearised observation model with ccorrelated obseration noise.
+/// Uses a Linear observation model with correlated additive observation noise.
 pub trait LinearObservationCorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>: LinearEstimator<N>
     where DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>
 {
@@ -82,8 +90,7 @@ pub trait LinearObservationCorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>: 
 
 /// Additive noise.
 ///
-/// Linear additive noise represented as a the noise variance vector and a noise coupling matrix.
-/// The noise coveriance is G.q.G'.
+/// Linear additive noise represented as a the noise variance vector.
 pub struct AdditiveNoise<N: RealField, QD: Dim>
     where DefaultAllocator: Allocator<N, QD>
 {
