@@ -20,7 +20,7 @@ use na::base::storage::Storage;
 use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
-use crate::mine::matrix::{check_positive, prod_spd, prod_spdt};
+use crate::mine::matrix::{check_positive, quadform_tr};
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearEstimator, LinearObserveModel, LinearPredictModel, LinearPredictor};
 
 
@@ -83,8 +83,8 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationSta
         check_positive(rcond, "I not PD in predict")?;
 
         // Predict information matrix, and state covariance
-        X = prod_spd(&pred.Fx, &X);
-        X += prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
+        X.quadform_tr(N::one(), &pred.Fx, &X.clone(), N::zero());
+        quadform_tr(&mut X, N::one(), &noise.G, &noise.q, N::one());
 
         self.init(&KalmanState { x: x_pred, X })
     }
@@ -109,9 +109,9 @@ impl<N: RealField, D: Dim> InformationState<N, D>
         let I_shape = self.I.data.shape();
 
         // A = invFx'*Y*invFx ,Inverse Predict covariance
-        let A = prod_spdt(&pred_inv.Fx, &self.I);
+        let A = (&self.I * &pred_inv.Fx).transpose() * &pred_inv.Fx;
         // B = G'*A*G+invQ , A in coupled additive noise space
-        let mut B = prod_spdt(&noise.G, &A);
+        let mut B = (&A * &noise.G).transpose() * &noise.G;
         for i in 0..noise.q.nrows()
         {
             if noise.q[i] < N::zero() {    // allow PSD q, let infinity propagate into B
@@ -125,7 +125,7 @@ impl<N: RealField, D: Dim> InformationState<N, D>
         check_positive(rcond, "(G'invFx'.I.inv(Fx).G + inv(Q)) not PD")?;
 
         // G*invB*G' ,in state space
-        self.I = prod_spd(&noise.G, &B);
+        self.I.quadform_tr(N::one(), &noise.G, &B, N::zero());
         // I - A* G*invB*G' ,information gain
         let ig = MatrixMN::identity_generic(I_shape.0, I_shape.1) - &A * &self.I;
         // Information
@@ -152,7 +152,9 @@ impl<N: RealField, D: Dim> InformationState<N, D>
         let zz = s + &obs.Hx * x;        // Strange EIF observation object
 
         // Observation Information, TODO use inverse directly on q, D factors
-        let mut ZI = prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
+        let mut ZI = MatrixMN::zeros_generic(noise.G.data.shape().0, noise.G.data.shape().0);
+        quadform_tr(&mut ZI, N::one(), &noise.G, &noise.q, N::zero());
+            // prod_spd(&noise.G, &MatrixN::from_diagonal(&noise.q));
         let rcond = UDU::new().UdUinversePD(&mut ZI);
         check_positive(rcond, "Z not PD")?;
 

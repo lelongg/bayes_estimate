@@ -14,8 +14,7 @@ use na::storage::Storage;
 use nalgebra as na;
 
 use crate::linalg::cholesky;
-use crate::mine::matrix;
-use crate::mine::matrix::check_positive;
+use crate::mine::matrix::{check_positive, quadform_tr};
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearEstimator, LinearObservationCorrelated,
                     LinearObservationUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor};
 
@@ -64,7 +63,7 @@ impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for KalmanState<N,
         self.x = x_pred;
         // X = Fx.X.FX' + G.q.G'
         self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
-        matrix::quadform_tr(&mut self.X, N::one(), &noise.G, &noise.q, N::one());
+        quadform_tr(&mut self.X, N::one(), &noise.G, &noise.q, N::one());
 
         Result::Ok(N::one())
     }
@@ -80,7 +79,7 @@ impl<N: RealField, D: Dim, ZD: DimSub<Dynamic>, ZQD: Dim> LinearObservationCorre
         let XHt = &self.X * obs.Hx.transpose();
         // S = Hx.X.Hx' + G.q.G'
         let mut S = &obs.Hx * &XHt;
-        matrix::quadform_tr(&mut S, N::one(), &noise.G, &noise.q, N::one());
+        quadform_tr(&mut S, N::one(), &noise.G, &noise.q, N::one());
         let S2 = S.clone();
 
         // Inverse innovation covariance

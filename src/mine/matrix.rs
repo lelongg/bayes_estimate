@@ -1,4 +1,4 @@
-use na::{allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, MatrixN, RealField, Scalar, SquareMatrix, Vector};
+use na::{allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, RealField, Scalar, SquareMatrix, Vector};
 use na::storage::{Storage, StorageMut};
 use nalgebra as na;
 use nalgebra::constraint::{DimEq, ShapeConstraint};
@@ -41,32 +41,6 @@ pub fn quadform_tr<N: RealField, D1, S, R3, C3, S3, D4, S4>(
     }
 }
 
-
-pub fn prod_spd<N: RealField, R3, C3, D4, S3, S4>(lhs: &Matrix<N, R3, C3, S3>, mid: &SquareMatrix<N, D4, S4>) -> MatrixN<N, R3>
-    where
-        R3: Dim,
-        C3: Dim,
-        S3: Storage<N, R3, C3>,
-        D4: Dim,
-        S4: Storage<N, D4, D4>,
-        DefaultAllocator: Allocator<N, R3, D4> + Allocator<N, C3, R3> + Allocator<N, R3, R3>,
-        ShapeConstraint: DimEq<C3, D4> + DimEq<D4, C3>
-{
-    lhs * mid * lhs.transpose()
-}
-
-pub fn prod_spdt<N: RealField, R3, C3, D4, S3, S4>(lhs: &Matrix<N, R3, C3, S3>, mid: &SquareMatrix<N, D4, S4>) -> MatrixN<N, C3>
-    where
-        R3: Dim,
-        C3: Dim,
-        S3: Storage<N, R3, C3>,
-        D4: Dim,
-        S4: Storage<N, D4, D4>,
-        DefaultAllocator: Allocator<N, D4, C3> + Allocator<N, C3, D4> + Allocator<N, C3, C3>,
-        ShapeConstraint: DimEq<D4, R3>
-{
-    (mid * lhs).transpose() * lhs
-}
 
 pub fn as_zeros<N: RealField, R: Dim, C: Dim>(shape: (R, C)) -> MatrixMN<N, R, C>
     where
