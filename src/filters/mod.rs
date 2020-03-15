@@ -1,3 +1,5 @@
-pub mod covariance_filter;
-pub mod information_filter;
-pub mod ud_filter;
+//! A collection of Bayesian state estimators
+
+pub mod covariance;
+pub mod information;
+pub mod ud;

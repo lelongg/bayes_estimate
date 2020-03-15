@@ -9,7 +9,7 @@ use na::{MatrixMN, RealField};
 use nalgebra as na;
 
 use bayes_filter as bf;
-use bf::filters::ud_filter::UDState;
+use bf::filters::ud::UDState;
 use bf::models::{
     AdditiveNoise, InformationState, KalmanState, LinearObserveModel, LinearPredictModel,
 };
