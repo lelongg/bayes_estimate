@@ -1,5 +1,8 @@
-use na::{allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, RealField, Scalar, SquareMatrix, Vector};
 use na::storage::{Storage, StorageMut};
+use na::{
+    allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, RealField, Scalar, SquareMatrix,
+    Vector,
+};
 use nalgebra as na;
 use nalgebra::constraint::{DimEq, ShapeConstraint};
 
@@ -32,7 +35,7 @@ pub fn quadform_tr<N: RealField, D1, S, R3, C3, S3, D4, S4>(
     D4: Dim,
     S3: Storage<N, R3, C3>,
     S4: Storage<N, D4>,
-    ShapeConstraint: DimEq<D1, R3> + DimEq<C3, D4>
+    ShapeConstraint: DimEq<D1, R3> + DimEq<C3, D4>,
 {
     mat.ger(alpha * mid[0], &lhs.column(0), &lhs.column(0), beta);
 
@@ -41,23 +44,24 @@ pub fn quadform_tr<N: RealField, D1, S, R3, C3, S3, D4, S4>(
     }
 }
 
-
 pub fn as_zeros<N: RealField, R: Dim, C: Dim>(shape: (R, C)) -> MatrixMN<N, R, C>
-    where
-        DefaultAllocator: Allocator<N, R, C>
+where
+    DefaultAllocator: Allocator<N, R, C>,
 {
     MatrixMN::zeros_generic(shape.0, shape.1)
 }
 
-pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(this: &mut Matrix<N, R1, C1, SB1>, other: &Matrix<N, R2, C2, SB2>)
-    where
-        N: Scalar + Copy,
-        R1: Dim,
-        C1: Dim,
-        SB1: StorageMut<N, R1, C1>,
-        R2: Dim,
-        C2: Dim,
-        SB2: Storage<N, R2, C2>
+pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(
+    this: &mut Matrix<N, R1, C1, SB1>,
+    other: &Matrix<N, R2, C2, SB2>,
+) where
+    N: Scalar + Copy,
+    R1: Dim,
+    C1: Dim,
+    SB1: StorageMut<N, R1, C1>,
+    R2: Dim,
+    C2: Dim,
+    SB2: Storage<N, R2, C2>,
 {
     assert!(
         this.shape() == other.shape(),
@@ -75,8 +79,7 @@ pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(this: &mut Matrix<N, R1, C1, SB1>,
  * Checks a the reciprocal condition number is >= 0
  * IEC 559 NaN values are never true
  */
-pub fn check_positive<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str>
-{
+pub fn check_positive<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str> {
     if rcond >= N::zero() {
         Result::Ok(rcond)
     } else {

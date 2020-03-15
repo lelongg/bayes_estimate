@@ -24,7 +24,8 @@ use nalgebra::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, RealField,
  *  By definition rcond <= 1 as min<=max
  */
 pub fn rcond_vec<N: RealField, R: Dim>(dv: &VectorN<N, R>) -> N
-    where DefaultAllocator: Allocator<N, R>
+where
+    DefaultAllocator: Allocator<N, R>,
 {
     // Special case an empty matrix
     let n = dv.nrows();
@@ -54,7 +55,8 @@ pub fn rcond_vec<N: RealField, R: Dim>(dv: &VectorN<N, R>) -> N
 }
 
 pub fn rcond_symetric<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
-    where DefaultAllocator: Allocator<N, R, C>
+where
+    DefaultAllocator: Allocator<N, R, C>,
 {
     // Special case an empty matrix
     let n = sm.nrows();
@@ -88,7 +90,8 @@ pub fn rcond_symetric<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
  * when determining the maximum element.
  */
 pub fn rcond_ignore_infinity<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
-    where DefaultAllocator: Allocator<N, R, C>
+where
+    DefaultAllocator: Allocator<N, R, C>,
 {
     // Special case an empty matrix
     let n = sm.nrows();
@@ -141,7 +144,7 @@ pub fn rcond_ignore_infinity<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C
 fn rcond_min_max<N: RealField>(mind: N, maxd: N) -> N {
     if mind < N::zero() {
         // matrix is negative
-        mind    // mind < 0 but does not represent a rcond
+        mind // mind < 0 but does not represent a rcond
     } else {
         // ISSUE mind may still be -0, this is progated into rcond
         assert!(mind <= maxd); // check sanity
@@ -156,4 +159,3 @@ fn rcond_min_max<N: RealField>(mind: N, maxd: N) -> N {
         }
     }
 }
-
