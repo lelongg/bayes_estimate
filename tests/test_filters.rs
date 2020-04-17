@@ -314,18 +314,20 @@ where
     println!("final={:.6}{:.6}", xx.x, xx.X);
     println!("{:} ms", elapsed);
 
-    let x2 = new_copy(U2, U1, &xx.x);
-    let xx2 = new_copy(U2, U2, &xx.X);
-    expect(KalmanState { x: x2, X: xx2 });
+    expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
 }
 
-fn expect(state: KalmanState<f64, U2>) {
+fn expect_state<D : Dim>(state: &KalmanState<f64, D>)
+where
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
+{
     let expect_x = Vector2::new(1000., 0.0152);
     approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001);
     approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01);
 
-    let expect_xx = Matrix2::new(0.000000, 0.000049, 0.000049, 0.014701);
-    assert!(det(&(state.X - expect_xx)).abs() < 0.000000000001);
+    approx::assert_abs_diff_eq!(state.X[(0,0)], 0.000000, epsilon = 0.000001);
+    approx::assert_abs_diff_eq!(state.X[(0,1)], 0.000049, epsilon = 0.000001);
+    approx::assert_abs_diff_eq!(state.X[(1,1)], 0.014701, epsilon = 0.000003);
 }
 
 fn new_copy<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim, S1: Storage<N, R1, C1>>(
@@ -340,13 +342,4 @@ where
     let mut zeroed = MatrixMN::<N, R, C>::zeros_generic(r, c);
     zeroed.copy_from(m);
     zeroed
-}
-
-fn det(m2: &Matrix2<f64>) -> f64 {
-    let m11 = m2.get((0, 0)).unwrap();
-    let m12 = m2.get((0, 1)).unwrap();
-    let m21 = m2.get((1, 0)).unwrap();
-    let m22 = m2.get((1, 1)).unwrap();
-
-    m11 * m22 - m21 * m12
 }
