@@ -107,16 +107,14 @@ impl<N: RealField, D: Dim> InformationState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    /* Linear information predict
-     *  Computation is through information state i,I only
-     *  Uses x(k+1|k) = Fx * x(k|k) instead of extended x(k+1|k) = f(x(k|k))
-     * Requires i(k|k), I(k|k)
-     * Predicts i(k+1|k), I(k+1|k)
-     *
-     * The numerical solution used is particularly flexible. It takes
-     * particular care to avoid invertibility requirements for the noise and noise coupling g,Q
-     * Therefore both zero noises and zeros in the couplings can be used
-     */
+    /// Linear information predict.
+    ///
+    /// Computation is through information state i,I only.
+    /// Uses x(k+1|k) = Fx * x(k|k) instead of extended x(k+1|k) = f(x(k|k))
+    ///
+    /// The numerical solution used is particularly flexible. It takes
+    /// particular care to avoid invertibility requirements for the noise and noise coupling g,Q
+    /// Therefore both zero noises and zeros in the couplings can be used.
     pub fn predict_linear_invertable<QD: Dim>(
         &mut self,
         pred_inv: &LinearPredictModel<N, D>,

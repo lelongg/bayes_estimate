@@ -1,28 +1,23 @@
+//! Numerical comparison of reciprocal condition numbers.
+//!
+//! Required for all linear algebra in models and filters.
+
 use nalgebra::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, RealField, VectorN};
 
-/**
- * Numerical comparison of reciprocal condition numbers
- *  Required for all linear algebra in models and filters
- */
-
-/* Estimate the reciprocal condition number of a Diagonal Matrix for inversion.
- * D represents a diagonal matrix, the parameter is actually passed as a vector
- *
- * The Condition Number is defined from a matrix norm.
- *  Choose max element of D as the norm of the original matrix.
- *  Assume this norm for inverse matrix is min element D.
- *  Therefore rcond = min/max
- *
- * Note:
- *  Defined to be 0 for semi-definite and 0 for an empty matrix
- *  Defined to be 0 for max and min infinite
- *  Defined to be <0 for negative matrix (D element a value  < 0)
- *  Defined to be <0 with any NaN element
- *
- *  A negative matrix may be due to errors in the original matrix resulting in
- *   a factorisation producing special values in D (e.g. -infinity,NaN etc)
- *  By definition rcond <= 1 as min<=max
- */
+/// Estimate the reciprocal condition number of a Diagonal Matrix for inversion.
+///
+/// D represents a diagonal matrix, the parameter is actually passed as a vector.
+///
+/// The Condition Number is defined from a matrix norm.
+/// Choose max element of D as the norm of the original matrix. Assume this norm for inverse matrix is min element D.
+/// Therefore rcond = min/max. By definition rcond <= 1 as min<=max. Note:
+/// Defined to be 0 for semi-definite and 0 for an empty matrix
+/// Defined to be 0 for max and min infinite
+/// Defined to be <0 for negative matrix (D element a value  < 0)
+/// Defined to be <0 with any NaN element
+///
+/// A negative matrix may be due to errors in the original matrix resulting in
+/// a factorisation producing special values in D (e.g. -infinity,NaN etc)
 pub fn rcond_vec<N: RealField, R: Dim>(dv: &VectorN<N, R>) -> N
 where
     DefaultAllocator: Allocator<N, R>,
@@ -85,10 +80,9 @@ where
     }
 }
 
-/* Estimate the reciprocal condition number of a Diagonal Matrix for inversion.
- * Same as rcond_internal except that elements are infinity are ignored
- * when determining the maximum element.
- */
+/// Estimate the reciprocal condition number of a Diagonal Matrix for inversion.
+///
+/// Same as rcond_internal except that elements are infinity are ignored* when determining the maximum element.
 pub fn rcond_ignore_infinity<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
 where
     DefaultAllocator: Allocator<N, R, C>,

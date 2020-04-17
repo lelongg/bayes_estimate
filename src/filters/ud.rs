@@ -52,7 +52,7 @@ where
     ///
     /// d is the size of states vector and rows in UD.
     ///
-    /// xud is the number of columns in UD. This will be large then d to accomdate the matrix
+    /// XUD is the number of columns in UD. This will be large then d to accomdate the matrix
     /// dimensions of the prediction model. The extra columns are used for the prediction computation.
     pub fn new(d: D, xud: XUD) -> Self {
         assert!(xud.value() >= d.value(), "xud must be >= d");
@@ -145,13 +145,15 @@ where
         + Allocator<N, D, DimSum<D, ZQD>>
         + Allocator<N, DimSum<D, ZQD>>,
 {
-    /* Standard linrz observe
-     *  Uncorrelated observations are applied sequentially in the order they appear in z
-     *  The sequential observation updates state x
-     *  Therefore the model of each observation needs to be computed sequentially. Generally this
-     *  is inefficient and observe (UD_sequential_observe_model&) should be used instead
-     * Return: Minimum rcond of all sequential observe
-     */
+    /// Standard linrz observe.
+    ///
+    /// Uncorrelated observations are applied sequentially in the order they appear in z.
+    ///
+    /// The sequential observation updates state x.
+    ///
+    /// Therefore the model of each observation needs to be computed sequentially. Generally this
+    /// is inefficient and observe (UD_sequential_observe_model&) should be used instead
+    //// Return: Minimum rcond of all sequential observe
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
@@ -244,12 +246,13 @@ where
         Result::Ok(rcondmin)
     }
 
-    /* Special Linear Hx observe for correlated Z
-     *  Z must be PD and will be decorrelated
-     * Applies observations sequentially in the order they appear in z
-     * Creates temporary Vec and Matrix to decorrelate z,Z
-     * Return: Minimum rcond of all sequential observe
-     */
+    /// Special Linear Hx observe for correlated Z.
+    ///
+    /// Z must be PD and will be decorrelated
+    /// Applies observations sequentially in the order they appear in z
+    /// Creates temporary Vec and Matrix to decorrelate z,Z
+    ///
+    /// Return: Minimum rcond of all sequential observe
     pub fn observe_decorrelate<ZD: Dim, ZQD: Dim>(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
@@ -363,12 +366,11 @@ where
     DefaultAllocator:
         Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>,
 {
-    /* MWG-S prediction from Bierman  p.132
-     *  q can have order less then x and a matching G so GqG' has order of x
-     *
-     * Return:
-     *		reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
-     */
+    /// MWG-S prediction from Bierman p.132
+    ///
+    /// q can have order less then x and a matching G so GqG' has order of x
+    ///
+    /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
     fn predictGq<UD: Dim>(
         &mut self,
         scratch: &mut PredictScratch<N, XUD>,
@@ -507,21 +509,20 @@ where
         UDU::UdUrcond(&self.UD)
     }
 
-    /* Linear UD factorisation update
-     *  Bierman UdU' factorisation update. Bierman p.100
-     * Input
-     *  h observation coefficients
-     *  r observation variance
-     * Output
-     *  gain  observation Kalman gain
-     *  alpha observation innovation variance
-     * Variables with physical significance
-     *  gamma becomes covariance of innovation
-     * Precondition:
-     *  r is PSD (not checked)
-     * Return:
-     *  reciprocal condition number of UD, -1 if alpha singular (negative or zero)
-     */
+    /// Linear UD factorisation update from Bierman p.100
+    ///
+    /// # Input
+    ///  h observation coefficients
+    ///  r observation variance
+    /// # Output
+    ///  gain  observation Kalman gain
+    ///  alpha observation innovation variance
+    /// # Variables with physical significance
+    ///  gamma becomes covariance of innovation
+    /// # Precondition
+    ///  r is PSD (not checked)
+    /// # Return
+    ///  reciprocal condition number of UD, -1 if alpha singular (negative or zero)
     fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, r: N) -> N {
         let n = self.UD.nrows();
         // a(n) is U'a
