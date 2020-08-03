@@ -1,4 +1,4 @@
-//! A collection of Bayesian state estimators
+//! A collection of Bayesian state estimators.
 
 pub mod covariance;
 pub mod information;

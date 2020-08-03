@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
-//! Covariance filter.
+//! Covariance state estimation.
 //!
-//! A Bayesian filter that uses a Kalman state representation [`KalmanState`] of the system for filtering.
+//! A discrete Bayesian estimator that uses a Kalman state representation [`KalmanState`] of the system for estimation.
 //! The Kalman state is simply the x,X pair the dimensions of both are the dimensions of the system.
 //!
 //! The linear Kalman state representation can also be used for non-linear system by using linearised forms of the system model.

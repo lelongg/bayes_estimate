@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
-//! UD 'square root' filter.
+//! UD 'square root' state estimation.
 //!
-//! A Bayesian filter that uses a 'square root' factorisation of the Kalman state representation [`KalmanState`] of the system for filtering.
+//! A discrete Bayesian filter that uses a 'square root' factorisation of the Kalman state representation [`KalmanState`] of the system for estimation.
 //!
 //! The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and
 //! d is a diagonal vector.
-//! Numerically the this 'square root' factorisation is advantagous as condition of when inverting is improved by the square root.
+//! Numerically the this 'square root' factorisation is advantageous as condition of when inverting is improved by the square root.
 //!
 //! The linear representation can also be used for non-linear system by using linearised forms of the system model.
 //!
@@ -27,7 +27,7 @@ use crate::models::{
 
 /// UD State representation.
 ///
-/// Linear respresentation as a state vector and 'square root' factorisation of the state covariance matrix.
+/// Linear representation as a state vector and 'square root' factorisation of the state covariance matrix.
 ///
 /// The state covariance X is factorised with a modified Cholesky factorisation so U.d.U' == X, where U is upper triangular matrix (0 diagonal) and
 /// d is a diagonal vector. U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
@@ -52,7 +52,7 @@ where
     ///
     /// d is the size of states vector and rows in UD.
     ///
-    /// XUD is the number of columns in UD. This will be large then d to accomdate the matrix
+    /// XUD is the number of columns in UD. This will be large then d to accommodate the matrix
     /// dimensions of the prediction model. The extra columns are used for the prediction computation.
     pub fn new(d: D, xud: XUD) -> Self {
         assert!(xud.value() >= d.value(), "xud must be >= d");
@@ -145,11 +145,9 @@ where
         + Allocator<N, D, DimSum<D, ZQD>>
         + Allocator<N, DimSum<D, ZQD>>,
 {
-    /// Standard linrz observe.
+    /// Implement observe using sequential observation updates.
     ///
     /// Uncorrelated observations are applied sequentially in the order they appear in z.
-    ///
-    /// The sequential observation updates state x.
     ///
     /// Therefore the model of each observation needs to be computed sequentially. Generally this
     /// is inefficient and observe (UD_sequential_observe_model&) should be used instead
@@ -179,7 +177,10 @@ where
     pub v: VectorN<N, XUD>,
 }
 
-pub struct ObserveScratch<N: RealField, D: Dim>
+/// Observe Scratch.
+///
+/// Provides temporary variables for observe calculation.
+ pub struct ObserveScratch<N: RealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D>,
 {

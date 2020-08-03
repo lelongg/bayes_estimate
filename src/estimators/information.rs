@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
-//! Information filter.
+//! Information state estimation.
 //!
-//! A Bayesian filter that uses a linear information representation [`InformationState`] of the system for filtering.
+//! A discrete Bayesian estimator that uses a linear information representation [`InformationState`] of the system for estimation.
 //! The information state is simply the i,I pair the dimensions of both are the dimensions of the system.
 //!
-//! The Kalman state and Information state are equivilent:
+//! The Kalman state and Information state are equivalent:
 //! I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
 //!
 //! A fundamental property of the Information state is that Information is additive. So if there is more information
