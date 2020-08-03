@@ -8,6 +8,8 @@ use nalgebra::constraint::{DimEq, ShapeConstraint};
 
 /// Computes the quadratic form `self = alpha * lhs * mid * lhs.transpose() + beta * self`.
 ///
+/// 'mid' is a diagonal matrix represented by a Vector.
+///
 /// # Examples:
 ///
 /// ```

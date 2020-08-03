@@ -11,7 +11,7 @@
 
 use na::storage::Storage;
 use na::{
-    allocator::Allocator, DefaultAllocator, Dim, DimSub, Dynamic, MatrixN, RealField, VectorN, U1,
+    allocator::Allocator, DefaultAllocator, Dim, MatrixN, RealField, VectorN, U1,
 };
 use nalgebra as na;
 
@@ -80,15 +80,14 @@ where
     ) -> Result<N, &'static str> {
         self.x = x_pred;
         // X = Fx.X.FX' + G.q.G'
-        self.X
-            .quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
+        self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
         quadform_tr(&mut self.X, N::one(), &noise.G, &noise.q, N::one());
 
         Result::Ok(N::one())
     }
 }
 
-impl<N: RealField, D: Dim, ZD: DimSub<Dynamic>, ZQD: Dim> LinearObservationCorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObservationCorrelated<N, D, ZD, ZQD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
@@ -129,7 +128,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: DimSub<Dynamic>, ZQD: Dim>
+impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>
     LinearObservationUncorrelated<N, D, ZD, ZQD> for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>

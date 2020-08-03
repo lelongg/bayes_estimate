@@ -3,7 +3,7 @@
 //! Bayesian estimation models.
 //!
 //! Defines a hierarchy of traits that model discrete systems estimation operations.
-//! State representions are definied by structs
+//! State representations are defined by structs
 
 use na::storage::Storage;
 use na::RealField;
@@ -12,7 +12,7 @@ use nalgebra as na;
 
 /// Kalman State.
 ///
-/// Linear respresentation as a state vector and the state covariance (symetric positive semidefinate) matrix.
+/// Linear representation as a state vector and the state covariance (symmetric positive semi-definite) matrix.
 #[derive(PartialEq, Clone)]
 pub struct KalmanState<N: RealField, D: Dim>
 where
@@ -20,13 +20,13 @@ where
 {
     /// State vector
     pub x: VectorN<N, D>,
-    /// State covariance matrix (symetric positive semidefinate)
+    /// State covariance matrix (symmetric positive semi-definite)
     pub X: MatrixN<N, D>,
 }
 
 /// Information State.
 ///
-/// Linear respresentation as a information state vector and the information (symetric positive semidefinate) matrix.
+/// Linear representation as a information state vector and the information (symmetric positive semi-definite) matrix.
 #[derive(PartialEq, Clone)]
 pub struct InformationState<N: RealField, D: Dim>
 where
@@ -34,7 +34,7 @@ where
 {
     /// Information state vector
     pub i: VectorN<N, D>,
-    /// Information matrix (symetric positive semidefinate)
+    /// Information matrix (symmetric positive semi-definite)
     pub I: MatrixN<N, D>,
 }
 
@@ -124,7 +124,7 @@ where
 /// Additive noise.
 ///
 /// Linear additive noise represented as a the noise variance vector and a noise coupling matrix.
-/// The noise coveriance is G.q.G'.
+/// The noise covariance is G.q.G'.
 pub struct AdditiveCorrelatedNoise<N: RealField, D: Dim, QD: Dim>
 where
     DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
@@ -137,7 +137,7 @@ where
 
 /// Linear prediction model.
 ///
-/// Prediction is represented by a state transaition matrix.
+/// Prediction is represented by a state transition matrix.
 pub struct LinearPredictModel<N: RealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D>,

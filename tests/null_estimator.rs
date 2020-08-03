@@ -1,6 +1,12 @@
 #![allow(non_snake_case)]
 #![allow(unused_variables)]
 
+//! A 'null' implementation of a filter with a Kalman state representation [`KalmanState`].
+//!
+//! No numerical computations are performed, the traits have implmentations which do nothing.
+//!
+//! [`KalmanState`]: ../models/struct.KalmanState.html
+//!
 use bayes_filter;
 use nalgebra as na;
 

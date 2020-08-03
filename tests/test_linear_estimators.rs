@@ -1,15 +1,25 @@
+//! Test the numerical operations of linear and linearised estimator implementations.
+//!
+//! [`covariance`] [`information`] and [`ud`] estimator implementations are tested.
+//!
+//! [`covariance`]: ../filters/covariance.html
+//! [`information`]: ../filters/information.html
+//! [`ud`]: ../filters/ud.html
+//!
+//! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
+
 use std::time::Instant;
 
 use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
 use na::base::storage::Storage;
-use na::{allocator::Allocator, DefaultAllocator, U1, U2, U3};
+use na::{allocator::Allocator, DefaultAllocator, U1, U2};
 use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
 use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{MatrixMN, RealField};
 use nalgebra as na;
 
 use bayes_filter as bf;
-use bf::filters::ud::UDState;
+use bf::estimators::ud::UDState;
 use bf::models::{
     AdditiveNoise, InformationState, KalmanState, LinearObserveModel, LinearPredictModel,
 };
@@ -36,38 +46,37 @@ const LIMIT_PD: f64 = std::f64::EPSILON * 1e5;
 
 #[test]
 fn test_covariance_u2() {
-    test_filter(&mut KalmanState::new(U2));
+    test_estimator(&mut KalmanState::new(U2));
 }
 
 #[test]
 fn test_information_u2() {
-    test_filter(&mut InformationState::new(U2));
+    test_estimator(&mut InformationState::new(U2));
 }
 
 #[test]
 fn test_ud_u2() {
-    test_filter(&mut UDState::new(U2, U3));
+    test_estimator(&mut UDState::new(U2, U2.add(U1)));
 }
 
 #[test]
 fn test_covariance_dynamic() {
-    test_filter(&mut KalmanState::new(Dynamic::new(2)));
+    test_estimator(&mut KalmanState::new(Dynamic::new(2)));
 }
 
 #[test]
 fn test_information_dynamic() {
-    test_filter(&mut InformationState::new(Dynamic::new(2)));
+    test_estimator(&mut InformationState::new(Dynamic::new(2)));
 }
 
 #[test]
 fn test_ud_dynamic() {
-    test_filter(&mut UDState::new(Dynamic::new(2), Dynamic::new(3)));
+    test_estimator(&mut UDState::new(Dynamic::new(2), Dynamic::new(3)));
 }
 
-/**
- * Checks a the reciprocal condition number exceeds a minimum
- * IEC 559 NaN values are never true
- */
+/// Checks a the reciprocal condition number exceeds a minimum.
+///
+/// IEC 559 NaN values are never true
 fn check(res: Result<f64, &'static str>, what: &'static str) -> Result<f64, String> {
     match res {
         Ok(_) => {
@@ -86,20 +95,25 @@ fn sqr(x: f64) -> f64 {
     x * x
 }
 
-trait Filter<D: Dim>:
+/// Define the estimator operations to be tested.
+trait TestEstimator<D: Dim>:
     LinearEstimator<f64> + KalmanEstimator<f64, D> + LinearPredictor<f64, D, U1>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
     fn trace_state(&self) {}
-    fn observe_innov(
+
+    /// Observation with uncorrelected noise
+    fn observe_innov_un(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveNoise<f64, U1>,
         s: &Vector1<f64>,
         x: &VectorN<f64, D>,
     ) -> Result<f64, &'static str>;
-    fn observe_linear_special(
+
+    /// Observation with correlected noise
+    fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
@@ -108,12 +122,13 @@ where
     ) -> Result<f64, &'static str>;
 }
 
-impl<D: Dim> Filter<D> for KalmanState<f64, D>
+/// Test covariance estimator operations defined on a KalmanState.
+impl<D: Dim> TestEstimator<D> for KalmanState<f64, D>
 where
     Self: LinearObservationCorrelated<f64, D, U1, U1>,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
-    fn observe_innov(
+    fn observe_innov_un(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveNoise<f64, U1>,
@@ -126,7 +141,7 @@ where
         LinearObservationUncorrelated::observe_innovation(self, obs, noise, &s)
     }
 
-    fn observe_linear_special(
+    fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
@@ -140,11 +155,12 @@ where
     }
 }
 
-impl<D: Dim> Filter<D> for InformationState<f64, D>
+/// Test information estimator operations defined on a InformationState.
+impl<D: Dim> TestEstimator<D> for InformationState<f64, D>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
-    fn observe_innov(
+    fn observe_innov_un(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveNoise<f64, U1>,
@@ -159,7 +175,7 @@ where
         Result::Ok(info.0)
     }
 
-    fn observe_linear_special(
+    fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
@@ -175,7 +191,8 @@ where
     }
 }
 
-impl<D: DimAdd<U1>> Filter<D> for UDState<f64, D, DimSum<D, U1>>
+/// Test UD estimator operations defined on a UDState.
+impl<D: DimAdd<U1>> TestEstimator<D> for UDState<f64, D, DimSum<D, U1>>
 where
     DefaultAllocator: Allocator<f64, D, D>
         + Allocator<f64, U1, D>
@@ -188,7 +205,7 @@ where
         println!("{}", self.UD);
     }
 
-    fn observe_innov(
+    fn observe_innov_un(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveNoise<f64, U1>,
@@ -201,7 +218,7 @@ where
         LinearObservationUncorrelated::observe_innovation(self, obs, noise, s)
     }
 
-    fn observe_linear_special(
+    fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
@@ -214,6 +231,7 @@ where
     }
 }
 
+/// Simple prediction model.
 fn fx<D: Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
 where
     DefaultAllocator: Allocator<f64, D>,
@@ -223,6 +241,7 @@ where
     xp
 }
 
+/// Simple observation model.
 fn hx<D: Dim>(x: &VectorN<f64, D>) -> Vector1<f64>
 where
     DefaultAllocator: Allocator<f64, D>,
@@ -230,7 +249,11 @@ where
     Vector1::new(x[0])
 }
 
-fn test_filter<D: Dim>(flt: &mut dyn Filter<D>)
+
+/// Numerically test the estimation operations of a TestEstimator.
+///
+/// Prediction und observation operations are performed and the expected KalmanState is checked.
+fn test_estimator<D: Dim>(est: &mut dyn TestEstimator<D>)
 where
     ShapeConstraint: SameNumberOfRows<U2, D> + SameNumberOfColumns<U2, D>,
     ShapeConstraint: SameNumberOfRows<D, U2> + SameNumberOfColumns<D, U2>,
@@ -243,7 +266,7 @@ where
         + Allocator<usize, D, D>
         + Allocator<usize, D>,
 {
-    let state = flt.state().unwrap().1;
+    let state = est.state().unwrap().1;
     let d = state.x.data.shape().0;
 
     let f_vv: f64 = (-DT * V_GAMMA).exp();
@@ -270,53 +293,50 @@ where
 
     let init_state: KalmanState<f64, D> = KalmanState {
         x: new_copy(d, U1, &Vector2::new(900., 1.5)),
-        X: new_copy(
-            d,
-            d,
-            &Matrix2::new(sqr(I_P_NOISE), 0.0, 0.0, sqr(I_V_NOISE)),
-        ),
+        X: new_copy(d, d, &Matrix2::new(sqr(I_P_NOISE), 0.0, 0.0, sqr(I_V_NOISE))),
     };
 
-    check(flt.init(&init_state), "init").unwrap();
-    flt.trace_state();
+    check(est.init(&init_state), "init").unwrap();
+    est.trace_state();
 
-    let xx = flt.state().unwrap().1;
+    let xx = est.state().unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
 
     let start = Instant::now();
     for _c in 0..2 {
-        let predict_x = flt.state().unwrap().1.x;
+        let predict_x = est.state().unwrap().1.x;
         let predict_xp = fx(&predict_x);
         check(
-            flt.predict(&linear_pred_model, predict_xp, &additive_noise),
+            est.predict(&linear_pred_model, predict_xp, &additive_noise),
             "pred",
         )
         .unwrap();
 
-        let obs_x = flt.state().unwrap().1.x;
+        let obs_x = est.state().unwrap().1.x;
         let s = z - hx(&obs_x);
         check(
-            flt.observe_innov(&linear_obs_model, &un_obs_noise, &s, &obs_x),
+            est.observe_innov_un(&linear_obs_model, &un_obs_noise, &s, &obs_x),
             "obs",
         )
         .unwrap();
     }
     let elapsed = start.elapsed().as_millis();
 
-    let obs_x = flt.state().unwrap().1.x;
+    let obs_x = est.state().unwrap().1.x;
     let s = z - hx(&obs_x);
     check(
-        flt.observe_linear_special(&linear_obs_model, &co_obs_noise, &s, &obs_x),
+        est.observe_linear_co(&linear_obs_model, &co_obs_noise, &s, &obs_x),
         "obs_linear",
     )
     .unwrap();
-    let xx = flt.state().unwrap().1;
+    let xx = est.state().unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
     println!("{:} ms", elapsed);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
 }
 
+/// Test the KalmanState is as expected.
 fn expect_state<D : Dim>(state: &KalmanState<f64, D>)
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
@@ -330,6 +350,7 @@ where
     approx::assert_abs_diff_eq!(state.X[(1,1)], 0.014701, epsilon = 0.000003);
 }
 
+/// Create a Dynamic or Static copy.
 fn new_copy<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim, S1: Storage<N, R1, C1>>(
     r: R,
     c: C,
@@ -339,7 +360,9 @@ where
     DefaultAllocator: Allocator<N, R, C>,
     ShapeConstraint: SameNumberOfRows<R, R1> + SameNumberOfColumns<C, C1>,
 {
-    let mut zeroed = MatrixMN::<N, R, C>::zeros_generic(r, c);
-    zeroed.copy_from(m);
-    zeroed
+    unsafe {
+        let mut copy = MatrixMN::<N, R, C>::new_uninitialized_generic(r, c);
+        copy.copy_from(m);
+        copy
+    }
 }
