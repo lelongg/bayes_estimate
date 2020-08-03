@@ -8,8 +8,6 @@
 //!
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
-use std::time::Instant;
-
 use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
 use na::base::storage::Storage;
 use na::{allocator::Allocator, DefaultAllocator, U1, U2};
@@ -302,7 +300,6 @@ where
     let xx = est.state().unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
 
-    let start = Instant::now();
     for _c in 0..2 {
         let predict_x = est.state().unwrap().1.x;
         let predict_xp = fx(&predict_x);
@@ -320,7 +317,6 @@ where
         )
         .unwrap();
     }
-    let elapsed = start.elapsed().as_millis();
 
     let obs_x = est.state().unwrap().1.x;
     let s = z - hx(&obs_x);
@@ -331,7 +327,6 @@ where
     .unwrap();
     let xx = est.state().unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
-    println!("{:} ms", elapsed);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
 }
