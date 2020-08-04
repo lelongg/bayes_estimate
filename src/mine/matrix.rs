@@ -9,20 +9,6 @@ use nalgebra::constraint::{DimEq, ShapeConstraint};
 /// Computes the quadratic form `self = alpha * lhs * mid * lhs.transpose() + beta * self`.
 ///
 /// 'mid' is a diagonal matrix represented by a Vector.
-///
-/// # Examples:
-///
-/// ```
-/// # #[macro_use] extern crate approx;
-/// # use nalgebra::{Matrix2, Matrix3, Matrix2x3, Vector2};
-/// let mut mat = Matrix2::identity();
-/// let lhs = Matrix2x3::new(1.0, 2.0, 3.0,
-///                          4.0, 5.0, 6.0);
-/// let mid = Vector3::new(0.1, 0.2, 0.3);
-/// let expected = lhs * Matrix3::from_diagonal(&mid) * lhs.transpose() * 10.0 + mat * 5.0;
-///
-/// quadform_tr(&mat, 10.0, &lhs, &mid, 5.0);
-/// assert_relative_eq!(mat, expected);
 pub fn quadform_tr<N: RealField, D1, S, R3, C3, S3, D4, S4>(
     mat: &mut SquareMatrix<N, D1, S>,
     alpha: N,
