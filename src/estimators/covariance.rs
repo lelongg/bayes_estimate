@@ -18,7 +18,7 @@ use nalgebra as na;
 use crate::linalg::cholesky;
 use crate::mine::matrix::{check_positive, quadform_tr};
 use crate::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearEstimator,
+    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
     LinearObservationCorrelated, LinearObservationUncorrelated, LinearObserveModel,
     LinearPredictModel, LinearPredictor,
 };
@@ -33,11 +33,6 @@ where
             X: MatrixN::zeros_generic(d, d),
         }
     }
-}
-
-impl<N: RealField, D: Dim> LinearEstimator<N> for KalmanState<N, D> where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for KalmanState<N, D>

@@ -21,7 +21,7 @@ use nalgebra as na;
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
 use crate::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearEstimator,
+    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
     LinearObservationUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor,
 };
 
@@ -63,12 +63,6 @@ where
             udu: UDU::new(),
         }
     }
-}
-
-// Provide Allocators for LinearEstimator.
-impl<N: RealField, D: Dim, XUD: Dim> LinearEstimator<N> for UDState<N, D, XUD> where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>
-{
 }
 
 impl<N: RealField, D: Dim, XUD: Dim> KalmanEstimator<N, D> for UDState<N, D, XUD>

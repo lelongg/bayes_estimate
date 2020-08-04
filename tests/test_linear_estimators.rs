@@ -22,8 +22,7 @@ use bf::models::{
     AdditiveNoise, InformationState, KalmanState, LinearObserveModel, LinearPredictModel,
 };
 use bf::models::{
-    KalmanEstimator, LinearEstimator, LinearObservationCorrelated, LinearObservationUncorrelated,
-    LinearPredictor,
+    KalmanEstimator, LinearObservationCorrelated, LinearObservationUncorrelated, LinearPredictor,
 };
 
 use approx;
@@ -95,7 +94,7 @@ fn sqr(x: f64) -> f64 {
 
 /// Define the estimator operations to be tested.
 trait TestEstimator<D: Dim>:
-    LinearEstimator<f64> + KalmanEstimator<f64, D> + LinearPredictor<f64, D, U1>
+    KalmanEstimator<f64, D> + LinearPredictor<f64, D, U1>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {

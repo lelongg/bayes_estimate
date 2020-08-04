@@ -23,7 +23,7 @@ use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive, quadform_tr};
 use crate::models::{
     AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState,
-    LinearEstimator, LinearObserveModel, LinearPredictModel, LinearPredictor,
+    LinearObserveModel, LinearPredictModel, LinearPredictor,
 };
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -41,11 +41,6 @@ where
         self.i = information.i.clone();
         self.I = information.I.clone();
     }
-}
-
-impl<N: RealField, D: Dim> LinearEstimator<N> for InformationState<N, D> where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>

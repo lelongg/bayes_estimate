@@ -11,7 +11,7 @@ use bayes_filter;
 use nalgebra as na;
 
 use bayes_filter::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanState, LinearEstimator,
+    AdditiveCorrelatedNoise, AdditiveNoise, KalmanState,
     LinearObservationCorrelated, LinearObservationUncorrelated, LinearObserveModel,
     LinearPredictModel, LinearPredictor,
 };
@@ -31,11 +31,6 @@ where
             _phantoms: PhantomData,
         }
     }
-}
-
-impl<N: RealField, D: Dim> LinearEstimator<N> for NullState<N, D> where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
 }
 
 impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for NullState<N, D>

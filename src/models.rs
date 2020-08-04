@@ -52,15 +52,10 @@ where
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
-/// A linear estimator.
-///
-/// Common to the linear estimators.
-pub trait LinearEstimator<N: SimdRealField> {}
-
 /// A linear predictor.
 ///
 /// Uses a Linear model with additive noise.
-pub trait LinearPredictor<N: SimdRealField, D: Dim, QD: Dim>: LinearEstimator<N>
+pub trait LinearPredictor<N: SimdRealField, D: Dim, QD: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D> + Allocator<N, QD>,
 {
@@ -76,8 +71,7 @@ where
 /// A linear observation with uncorrelated observation noise.
 ///
 /// Uses a Linear observation model with uncorrelated additive observation noise.
-pub trait LinearObservationUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>:
-    LinearEstimator<N>
+pub trait LinearObservationUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
 where
     DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>,
 {
@@ -96,8 +90,7 @@ where
 /// A linear observation with correlated observation noise.
 ///
 /// Uses a Linear observation model with correlated additive observation noise.
-pub trait LinearObservationCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>:
-    LinearEstimator<N>
+pub trait LinearObservationCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
 where
     DefaultAllocator:
         Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>,
