@@ -5,16 +5,16 @@
 //! Defines a hierarchy of traits that model discrete systems estimation operations.
 //! State representations are defined by structs
 
-use na::storage::Storage;
-use na::RealField;
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
+use na::SimdRealField;
+use na::storage::Storage;
 use nalgebra as na;
 
 /// Kalman State.
 ///
 /// Linear representation as a state vector and the state covariance (symmetric positive semi-definite) matrix.
 #[derive(PartialEq, Clone)]
-pub struct KalmanState<N: RealField, D: Dim>
+pub struct KalmanState<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
@@ -28,7 +28,7 @@ where
 ///
 /// Linear representation as a information state vector and the information (symmetric positive semi-definite) matrix.
 #[derive(PartialEq, Clone)]
-pub struct InformationState<N: RealField, D: Dim>
+pub struct InformationState<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
@@ -41,7 +41,7 @@ where
 /// A Kalman filter (estimator).
 ///
 /// The linear Kalman state representation x,X is used to represent the system.
-pub trait KalmanEstimator<N: RealField, D: Dim>
+pub trait KalmanEstimator<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
@@ -55,12 +55,12 @@ where
 /// A linear estimator.
 ///
 /// Common to the linear estimators.
-pub trait LinearEstimator<N: RealField> {}
+pub trait LinearEstimator<N: SimdRealField> {}
 
 /// A linear predictor.
 ///
 /// Uses a Linear model with additive noise.
-pub trait LinearPredictor<N: RealField, D: Dim, QD: Dim>: LinearEstimator<N>
+pub trait LinearPredictor<N: SimdRealField, D: Dim, QD: Dim>: LinearEstimator<N>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, QD> + Allocator<N, D> + Allocator<N, QD>,
 {
@@ -76,7 +76,7 @@ where
 /// A linear observation with uncorrelated observation noise.
 ///
 /// Uses a Linear observation model with uncorrelated additive observation noise.
-pub trait LinearObservationUncorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>:
+pub trait LinearObservationUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>:
     LinearEstimator<N>
 where
     DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>,
@@ -96,7 +96,7 @@ where
 /// A linear observation with correlated observation noise.
 ///
 /// Uses a Linear observation model with correlated additive observation noise.
-pub trait LinearObservationCorrelated<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>:
+pub trait LinearObservationCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>:
     LinearEstimator<N>
 where
     DefaultAllocator:
@@ -113,7 +113,7 @@ where
 /// Additive noise.
 ///
 /// Linear additive noise represented as a the noise variance vector.
-pub struct AdditiveNoise<N: RealField, QD: Dim>
+pub struct AdditiveNoise<N: SimdRealField, QD: Dim>
 where
     DefaultAllocator: Allocator<N, QD>,
 {
@@ -125,7 +125,7 @@ where
 ///
 /// Linear additive noise represented as a the noise variance vector and a noise coupling matrix.
 /// The noise covariance is G.q.G'.
-pub struct AdditiveCorrelatedNoise<N: RealField, D: Dim, QD: Dim>
+pub struct AdditiveCorrelatedNoise<N: SimdRealField, D: Dim, QD: Dim>
 where
     DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
 {
@@ -138,7 +138,7 @@ where
 /// Linear prediction model.
 ///
 /// Prediction is represented by a state transition matrix.
-pub struct LinearPredictModel<N: RealField, D: Dim>
+pub struct LinearPredictModel<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D>,
 {
@@ -149,7 +149,7 @@ where
 /// Linear observation model.
 ///
 /// Observation is represented by an observation matrix.
-pub struct LinearObserveModel<N: RealField, D: Dim, ZD: Dim>
+pub struct LinearObserveModel<N: SimdRealField, D: Dim, ZD: Dim>
 where
     DefaultAllocator: Allocator<N, ZD, D>,
 {
@@ -157,7 +157,7 @@ where
     pub Hx: MatrixMN<N, ZD, D>,
 }
 
-impl<'a, N: RealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise<N, D, QD>
+impl<'a, N: SimdRealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise<N, D, QD>
 where
     DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
 {

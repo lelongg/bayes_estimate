@@ -5,8 +5,11 @@ authors = ["Michael Stevens <mail@michael-stevens.de>"]
 edition = "2018"
 
 [dependencies]
-nalgebra = {path ="../nalgebra"}
+nalgebra = {path ="../nalgebra", version="0.21.1"}
 approx = "0.3.2"
+
+[dev-dependencies]
+simba = { version="0.1.5", features=["wide"] }
 
 [lib]
 name = "bayes_filter"
