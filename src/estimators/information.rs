@@ -221,6 +221,6 @@ where
         // Calculate EIF I = Hx'*ZI*Hx
         let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 
-        Result::Ok((rcond, InformationState { ii, II }))
+        Result::Ok((rcond, InformationState { i: ii, I: II }))
     }
 }
