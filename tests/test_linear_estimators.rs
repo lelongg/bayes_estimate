@@ -26,7 +26,7 @@ use bf::models::{
 };
 
 use approx;
-use bayes_filter::models::AdditiveCorrelatedNoise;
+use bayes_filter::models::{AdditiveCorrelatedNoise, AdditiveCoupledNoise};
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -116,7 +116,7 @@ where
     fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
-        noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
+        noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         _x: &VectorN<f64, D>,
     ) -> Result<f64, &'static str>;
@@ -125,7 +125,7 @@ where
 /// Test covariance estimator operations defined on a KalmanState.
 impl<D: Dim> TestEstimator<D> for KalmanState<f64, D>
 where
-    Self: LinearObserverCorrelated<f64, D, U1, U1>,
+    Self: LinearObserverCorrelated<f64, D, U1>,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
     fn observe_innov_un(
@@ -144,7 +144,7 @@ where
     fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
-        noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
+        noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         _x: &VectorN<f64, D>,
     ) -> Result<f64, &'static str>
@@ -178,7 +178,7 @@ where
     fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
-        noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
+        noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         x: &VectorN<f64, D>,
     ) -> Result<f64, &'static str>
@@ -221,13 +221,13 @@ where
     fn observe_linear_co(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
-        noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
+        noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         x: &VectorN<f64, D>,
     ) -> Result<f64, &'static str> {
         let z = s + hx(x);
 
-        self.observe_decorrelate::<U1, U1>(obs, noise, &z)
+        self.observe_decorrelate::<U1>(obs, noise, &z)
     }
 }
 
@@ -274,7 +274,7 @@ where
     let linear_pred_model = LinearPredictModel {
         Fx: new_copy(d, d, &Matrix2::new(1., DT, 0., f_vv)),
     };
-    let additive_noise = AdditiveCorrelatedNoise {
+    let additive_noise = AdditiveCoupledNoise {
         q: Vector1::new(DT * sqr((1. - f_vv) * V_NOISE)),
         G: new_copy(d, U1, &Matrix2x1::new(0.0, 1.0)),
     };
@@ -286,8 +286,7 @@ where
         q: Vector1::new(sqr(OBS_NOISE)),
     };
     let co_obs_noise = AdditiveCorrelatedNoise {
-        G: Matrix1::new(1.0),
-        q: Vector1::new(sqr(OBS_NOISE)),
+        Q: Matrix1::new(sqr(OBS_NOISE)),
     };
     let z = &Vector1::new(1000.);
 

@@ -10,11 +10,7 @@
 use bayes_filter;
 use nalgebra as na;
 
-use bayes_filter::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanState,
-    LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel,
-    LinearPredictModel, LinearPredictor,
-};
+use bayes_filter::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, VectorN};
 use std::marker::PhantomData;
 
@@ -46,50 +42,46 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D, QD>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str> {
         Result::Ok(N::one())
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverCorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim> LinearObserverCorrelated<N, D, ZD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, ZD, ZD>
         + Allocator<N, ZD, D>
         + Allocator<N, D, ZD>
-        + Allocator<N, ZD, ZQD>
         + Allocator<N, D>
         + Allocator<N, ZD>
-        + Allocator<N, ZQD>,
 {
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+        noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         Result::Ok(N::one())
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverUncorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim> LinearObserverUncorrelated<N, D, ZD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, ZD, ZD>
         + Allocator<N, ZD, D>
         + Allocator<N, D, ZD>
-        + Allocator<N, ZD, ZQD>
         + Allocator<N, D>
         + Allocator<N, ZD>
-        + Allocator<N, ZQD>,
 {
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZQD>,
+        noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         Result::Ok(N::one())

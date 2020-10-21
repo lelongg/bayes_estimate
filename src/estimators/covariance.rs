@@ -9,19 +9,14 @@
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
-use na::storage::Storage;
 use na::{
     allocator::Allocator, DefaultAllocator, Dim, MatrixN, RealField, VectorN, U1,
 };
 use nalgebra as na;
 
 use crate::linalg::cholesky;
-use crate::mine::matrix::{check_positive, quadform_tr};
-use crate::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
-    LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel,
-    LinearPredictModel, LinearPredictor,
-};
+use crate::mine::matrix::{check_positive, quadform_tr, prod_spd_udu};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
 where
@@ -71,7 +66,7 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D, QD>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str> {
         self.x = x_pred;
         // X = Fx.X.FX' + G.q.G'
@@ -82,30 +77,25 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverCorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim> LinearObserverCorrelated<N, D, ZD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, ZD, ZD>
         + Allocator<N, ZD, D>
         + Allocator<N, D, ZD>
-        + Allocator<N, ZQD, ZQD>
-        + Allocator<N, ZD, ZQD>
-        + Allocator<N, ZQD, ZD>
         + Allocator<N, D>
         + Allocator<N, ZD>
-        + Allocator<N, ZQD>,
 {
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+        noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         let XHt = &self.X * obs.Hx.transpose();
         // S = Hx.X.Hx' + G.q.G'
-        let mut S = &obs.Hx * &XHt;
-        quadform_tr(&mut S, N::one(), &noise.G, &noise.q, N::one());
+        let S = &obs.Hx * &XHt + prod_spd_udu(&noise.Q);
         let S2 = S.clone();
 
         // Inverse innovation covariance
@@ -123,28 +113,23 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>
-    LinearObserverUncorrelated<N, D, ZD, ZQD> for KalmanState<N, D>
+impl<N: RealField, D: Dim, ZD: Dim>
+    LinearObserverUncorrelated<N, D, ZD> for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, ZD, ZD>
         + Allocator<N, ZD, D>
         + Allocator<N, D, ZD>
-        + Allocator<N, ZQD, ZQD>
-        + Allocator<N, ZD, ZQD>
-        + Allocator<N, ZQD, ZD>
         + Allocator<N, D>
         + Allocator<N, ZD>
-        + Allocator<N, ZQD>,
 {
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZQD>,
+        noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
-        let dim: ZD = obs.Hx.data.shape().0;
-        let correlated = AdditiveCorrelatedNoise::<N, ZD, ZQD>::from_uncorrelated(noise, dim);
+        let correlated = AdditiveCorrelatedNoise::<N, ZD>::from_uncorrelated(noise);
         LinearObserverCorrelated::observe_innovation(self, obs, &correlated, s)
     }
 }

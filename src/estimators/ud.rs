@@ -20,10 +20,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
-use crate::models::{
-    AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
-    LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor,
-};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
 
 /// UD State representation.
 ///
@@ -118,26 +115,24 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D, QD>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str> {
         let mut scratch = self.new_predict_scratch();
         self.predict_use_scratch(&mut scratch, pred, x_pred, noise)
     }
 }
 
-impl<N: RealField, D: DimAdd<ZQD>, ZD: Dim, ZQD: Dim> LinearObserverUncorrelated<N, D, ZD, ZQD>
-    for UDState<N, D, DimSum<D, ZQD>>
+impl<N: RealField, D: Dim, XUD: Dim, ZD: Dim> LinearObserverUncorrelated<N, D, ZD>
+    for UDState<N, D, XUD>
 where
     DefaultAllocator: Allocator<N, ZD, ZD>
         + Allocator<N, D, D>
         + Allocator<N, ZD, D>
         + Allocator<N, D, ZD>
+        + Allocator<N, D, XUD>
         + Allocator<N, D>
         + Allocator<N, ZD>
-        + Allocator<N, ZD, ZQD>
-        + Allocator<N, ZQD>
-        + Allocator<N, D, DimSum<D, ZQD>>
-        + Allocator<N, DimSum<D, ZQD>>,
+        + Allocator<N, XUD>
 {
     /// Implement observe using sequential observation updates.
     ///
@@ -149,7 +144,7 @@ where
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZQD>,
+        noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         let mut scratch = self.new_observe_scratch();
@@ -193,7 +188,7 @@ where
         scratch: &mut PredictScratch<N, XUD>,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D, QD>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
     where
         DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
@@ -206,16 +201,16 @@ where
         matrix::check_positive(rcond, "X not PSD")
     }
 
-    pub fn observe_innovation_use_scratch<ZD: Dim, ZQD: Dim>(
+    pub fn observe_innovation_use_scratch<ZD: Dim>(
         &mut self,
         scratch: &mut ObserveScratch<N, D>,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZQD>,
+        noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>
     where
         DefaultAllocator:
-            Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>,
+            Allocator<N, ZD, D> + Allocator<N, ZD>
     {
         let z_size = s.nrows();
 
@@ -248,20 +243,16 @@ where
     /// Creates temporary Vec and Matrix to decorrelate z,Z
     ///
     /// Return: Minimum rcond of all sequential observe
-    pub fn observe_decorrelate<ZD: Dim, ZQD: Dim>(
+    pub fn observe_decorrelate<ZD: Dim>(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+        noise: &AdditiveCorrelatedNoise<N, ZD>,
         z: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>
     where
         DefaultAllocator: Allocator<N, ZD, ZD>
             + Allocator<N, ZD, D>
-            + Allocator<N, ZQD, ZQD>
-            + Allocator<N, ZD, ZQD>
-            + Allocator<N, ZQD, ZD>
             + Allocator<N, ZD>
-            + Allocator<N, ZQD>,
     {
         let x_size = self.x.nrows();
         let z_size = z.nrows();
@@ -271,13 +262,6 @@ where
         let mut zp = &obs.Hx * &self.x;
         let mut zpdecol = zp.clone();
 
-        // Factorise process noise as GzG'
-        let z_shape = z.data.shape().0;
-        let mut ZZ = MatrixN::zeros_generic(z_shape, z_shape);
-        matrix::quadform_tr(&mut ZZ, self.udu.one, &noise.G, &noise.q, self.udu.zero);
-        let rcond = self.udu.UdUfactor_variant2(&mut ZZ, z_size);
-        matrix::check_positive(rcond, "Z not PSD in observe")?;
-
         // Observation prediction and normalised observation
         let mut GIHx = obs.Hx.clone();
         {
@@ -285,7 +269,7 @@ where
             for j in 0..x_size {
                 for i in (0..z_size).rev() {
                     for k in i + 1..z_size {
-                        let t = ZZ[(i, k)] * GIHx[(k, j)];
+                        let t = noise.Q[(i, k)] * GIHx[(k, j)];
                         GIHx[(i, j)] -= t;
                     }
                 }
@@ -294,9 +278,9 @@ where
             // Solve G zp~ = z, G z~ = z  for zp~,z~ in-place
             for i in (0..z_size).rev() {
                 for k in i + 1..z_size {
-                    let zpt = ZZ[(i, k)] * zp[k];
+                    let zpt = noise.Q[(i, k)] * zp[k];
                     zp[i] -= zpt;
-                    let zpdt = ZZ[(i, k)] * zpdecol[k];
+                    let zpdt = noise.Q[(i, k)] * zpdecol[k];
                     zpdecol[i] -= zpdt;
                 }
             }
@@ -308,7 +292,7 @@ where
             // Update UD and extract gain
             let mut S = self.udu.zero;
             GIHx.row(o).transpose_to(&mut scratch.a);
-            let rcond = UDState::observeUD(self, &mut scratch, &mut S, ZZ[(o, o)]);
+            let rcond = UDState::observeUD(self, &mut scratch, &mut S, noise.Q[(o, o)]);
             matrix::check_positive(rcond, "S not PD in observe")?; // -1 implies S singular
             if rcond < rcondmin {
                 rcondmin = rcond;

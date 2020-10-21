@@ -9,6 +9,7 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN
 use na::SimdRealField;
 use na::storage::Storage;
 use nalgebra as na;
+use crate::mine::matrix::MatrixUDU;
 
 /// Kalman State.
 ///
@@ -64,16 +65,16 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D, QD>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>;
 }
 
 /// A linear observer with uncorrelated observation noise.
 ///
 /// Uses a Linear observation model with uncorrelated additive observation noise.
-pub trait LinearObserverUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
+pub trait LinearObserverUncorrelated<N: SimdRealField, D: Dim, ZD: Dim>
 where
-    DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>,
+    DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
 {
     /// State observation with a linear observation model, additive observation noise and
     /// the observation innovation.
@@ -82,7 +83,7 @@ where
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZQD>,
+        noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>;
 }
@@ -90,15 +91,15 @@ where
 /// A linear observer with correlated observation noise.
 ///
 /// Uses a Linear observation model with correlated additive observation noise.
-pub trait LinearObserverCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
+pub trait LinearObserverCorrelated<N: SimdRealField, D: Dim, ZD: Dim>
 where
     DefaultAllocator:
-        Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>,
+        Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD>
 {
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD, ZQD>,
+        noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>;
 }
@@ -108,7 +109,7 @@ where
 /// Linear additive noise represented as a the noise variance vector.
 pub struct AdditiveNoise<N: SimdRealField, QD: Dim>
 where
-    DefaultAllocator: Allocator<N, QD>,
+    DefaultAllocator: Allocator<N, QD>
 {
     /// Noise variance
     pub q: VectorN<N, QD>,
@@ -116,9 +117,20 @@ where
 
 /// Additive noise.
 ///
+/// Linear additive noise represented as a the noise covariance as a factorised UdU' matrix.
+pub struct AdditiveCorrelatedNoise<N: SimdRealField, QD: Dim>
+    where
+        DefaultAllocator: Allocator<N, QD, QD>
+{
+    /// Noise covariance
+    pub Q: MatrixUDU<N, QD>
+}
+
+/// Additive noise.
+///
 /// Linear additive noise represented as a the noise variance vector and a noise coupling matrix.
 /// The noise covariance is G.q.G'.
-pub struct AdditiveCorrelatedNoise<N: SimdRealField, D: Dim, QD: Dim>
+pub struct AdditiveCoupledNoise<N: SimdRealField, D: Dim, QD: Dim>
 where
     DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
 {
@@ -150,17 +162,20 @@ where
     pub Hx: MatrixMN<N, ZD, D>,
 }
 
-impl<'a, N: SimdRealField, D: Dim, QD: Dim> AdditiveCorrelatedNoise<N, D, QD>
+impl<'a, N: SimdRealField, QD: Dim> AdditiveCorrelatedNoise<N, QD>
 where
-    DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
+    DefaultAllocator: Allocator<N, QD, QD> + Allocator<N, QD>
 {
     /// Creates a AdditiveCorrelatedNoise from an AdditiveNoise.
-    ///
-    /// d-dim defines the 'D' dimension of the noise coupling matrix 'G'.
-    pub fn from_uncorrelated(uncorrelated: &'a AdditiveNoise<N, QD>, d_dim: D) -> Self {
-        AdditiveCorrelatedNoise {
-            G: MatrixMN::identity_generic(d_dim, uncorrelated.q.data.shape().0),
-            q: uncorrelated.q.clone(),
+    pub fn from_uncorrelated(uncorrelated: &'a AdditiveNoise<N, QD>) -> Self {
+        let z_size = uncorrelated.q.data.shape().0;
+        let mut correlated = AdditiveCorrelatedNoise {
+            Q: MatrixUDU::zeros_generic(z_size, z_size)
+        };
+        for i in 0..uncorrelated.q.nrows() {
+            correlated.Q[(i,i)] = uncorrelated.q[i];
         }
+
+        correlated
     }
 }
