@@ -12,7 +12,7 @@ use nalgebra as na;
 
 use bayes_filter::models::{
     AdditiveCorrelatedNoise, AdditiveNoise, KalmanState,
-    LinearObservationCorrelated, LinearObservationUncorrelated, LinearObserveModel,
+    LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel,
     LinearPredictModel, LinearPredictor,
 };
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, VectorN};
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObservationCorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverCorrelated<N, D, ZD, ZQD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObservationUncorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverUncorrelated<N, D, ZD, ZQD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>

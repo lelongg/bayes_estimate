@@ -217,10 +217,10 @@ where
         }
 
         // Calculate EIF i = Hx'*ZI*zz
-        let i = &HxTZI * zz;
+        let ii = &HxTZI * zz;
         // Calculate EIF I = Hx'*ZI*Hx
-        let I = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
+        let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 
-        Result::Ok((rcond, InformationState { i, I }))
+        Result::Ok((rcond, InformationState { ii, II }))
     }
 }

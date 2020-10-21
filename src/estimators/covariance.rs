@@ -19,7 +19,7 @@ use crate::linalg::cholesky;
 use crate::mine::matrix::{check_positive, quadform_tr};
 use crate::models::{
     AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
-    LinearObservationCorrelated, LinearObservationUncorrelated, LinearObserveModel,
+    LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel,
     LinearPredictModel, LinearPredictor,
 };
 
@@ -82,7 +82,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObservationCorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim> LinearObserverCorrelated<N, D, ZD, ZQD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
@@ -124,7 +124,7 @@ where
 }
 
 impl<N: RealField, D: Dim, ZD: Dim, ZQD: Dim>
-    LinearObservationUncorrelated<N, D, ZD, ZQD> for KalmanState<N, D>
+    LinearObserverUncorrelated<N, D, ZD, ZQD> for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, ZD, ZD>
@@ -145,6 +145,6 @@ where
     ) -> Result<N, &'static str> {
         let dim: ZD = obs.Hx.data.shape().0;
         let correlated = AdditiveCorrelatedNoise::<N, ZD, ZQD>::from_uncorrelated(noise, dim);
-        LinearObservationCorrelated::observe_innovation(self, obs, &correlated, s)
+        LinearObserverCorrelated::observe_innovation(self, obs, &correlated, s)
     }
 }

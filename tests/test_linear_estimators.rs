@@ -22,11 +22,12 @@ use bf::models::{
     AdditiveNoise, InformationState, KalmanState, LinearObserveModel, LinearPredictModel,
 };
 use bf::models::{
-    KalmanEstimator, LinearObservationCorrelated, LinearObservationUncorrelated, LinearPredictor,
+    KalmanEstimator, LinearObserverCorrelated, LinearObserverUncorrelated, LinearPredictor,
 };
 
 use approx;
 use bayes_filter::models::AdditiveCorrelatedNoise;
+use bayes_filter::estimators::information_root::InformationRootState;
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -40,6 +41,7 @@ const OBS_NOISE: f64 = 0.001;
 // Minimum allowable reciprocal condition number for PD Matrix factorisations
 // Use 1e5  * epsilon give 5 decimal digits of headroom
 const LIMIT_PD: f64 = std::f64::EPSILON * 1e5;
+
 
 #[test]
 fn test_covariance_u2() {
@@ -70,6 +72,12 @@ fn test_information_dynamic() {
 fn test_ud_dynamic() {
     test_estimator(&mut UDState::new(Dynamic::new(2), Dynamic::new(3)));
 }
+
+#[test]
+fn test_information_root_dynamic() {
+    test_estimator(&mut InformationRootState::new(Dynamic::new(2)));
+}
+
 
 /// Checks a the reciprocal condition number exceeds a minimum.
 ///
@@ -122,7 +130,7 @@ where
 /// Test covariance estimator operations defined on a KalmanState.
 impl<D: Dim> TestEstimator<D> for KalmanState<f64, D>
 where
-    Self: LinearObservationCorrelated<f64, D, U1, U1>,
+    Self: LinearObserverCorrelated<f64, D, U1, U1>,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
     fn observe_innov_un(
@@ -135,7 +143,7 @@ where
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        LinearObservationUncorrelated::observe_innovation(self, obs, noise, &s)
+        LinearObserverUncorrelated::observe_innovation(self, obs, noise, &s)
     }
 
     fn observe_linear_co(
@@ -148,7 +156,7 @@ where
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        LinearObservationCorrelated::observe_innovation(self, obs, noise, s)
+        LinearObserverCorrelated::observe_innovation(self, obs, noise, s)
     }
 }
 
@@ -212,7 +220,7 @@ where
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        LinearObservationUncorrelated::observe_innovation(self, obs, noise, s)
+        LinearObserverUncorrelated::observe_innovation(self, obs, noise, s)
     }
 
     fn observe_linear_co(
@@ -227,6 +235,42 @@ where
         self.observe_decorrelate::<U1, U1>(obs, noise, &z)
     }
 }
+
+/// Test information_root estimator operations defined on a InformationRootState.
+impl<D: Dim> TestEstimator<D> for InformationRootState<f64, D>
+    where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
+{
+    fn observe_innov_un(
+        &mut self,
+        obs: &LinearObserveModel<f64, D, U1>,
+        noise: &AdditiveNoise<f64, U1>,
+        s: &Vector1<f64>,
+        x: &VectorN<f64, D>,
+    ) -> Result<f64, &'static str>
+        where
+            DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
+    {
+        let info = self.observe_innovation_un(&obs, noise, s, x)?;
+        Result::Ok(info.0)
+    }
+
+    fn observe_linear_co(
+        &mut self,
+        obs: &LinearObserveModel<f64, D, U1>,
+        noise: &AdditiveCorrelatedNoise<f64, U1, U1>,
+        s: &Vector1<f64>,
+        x: &VectorN<f64, D>,
+    ) -> Result<f64, &'static str>
+        where
+            DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
+    {
+        let info = self.observe_innovation_co(obs, noise, s, x)?;
+        self.add_information(&info.1);
+        Result::Ok(info.0)
+    }
+}
+
 
 /// Simple prediction model.
 fn fx<D: Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>

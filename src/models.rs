@@ -68,10 +68,10 @@ where
     ) -> Result<N, &'static str>;
 }
 
-/// A linear observation with uncorrelated observation noise.
+/// A linear observer with uncorrelated observation noise.
 ///
 /// Uses a Linear observation model with uncorrelated additive observation noise.
-pub trait LinearObservationUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
+pub trait LinearObserverUncorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
 where
     DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD> + Allocator<N, ZQD>,
 {
@@ -87,10 +87,10 @@ where
     ) -> Result<N, &'static str>;
 }
 
-/// A linear observation with correlated observation noise.
+/// A linear observer with correlated observation noise.
 ///
 /// Uses a Linear observation model with correlated additive observation noise.
-pub trait LinearObservationCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
+pub trait LinearObserverCorrelated<N: SimdRealField, D: Dim, ZD: Dim, ZQD: Dim>
 where
     DefaultAllocator:
         Allocator<N, ZD, D> + Allocator<N, ZD, ZQD> + Allocator<N, ZD> + Allocator<N, ZQD>,

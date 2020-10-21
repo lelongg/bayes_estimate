@@ -22,7 +22,7 @@ use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
 use crate::models::{
     AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState,
-    LinearObservationUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor,
+    LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor,
 };
 
 /// UD State representation.
@@ -125,7 +125,7 @@ where
     }
 }
 
-impl<N: RealField, D: DimAdd<ZQD>, ZD: Dim, ZQD: Dim> LinearObservationUncorrelated<N, D, ZD, ZQD>
+impl<N: RealField, D: DimAdd<ZQD>, ZD: Dim, ZQD: Dim> LinearObserverUncorrelated<N, D, ZD, ZQD>
     for UDState<N, D, DimSum<D, ZQD>>
 where
     DefaultAllocator: Allocator<N, ZD, ZD>
