@@ -108,7 +108,7 @@ where
     /// The numerical solution used is particularly flexible. It takes
     /// particular care to avoid invertibility requirements for the noise and noise coupling g,Q
     /// Therefore both zero noises and zeros in the couplings can be used.
-    pub fn predict_linear_invertable<QD: Dim>(
+    pub fn predict_linear_invertible<QD: Dim>(
         &mut self,
         pred_inv: &LinearPredictModel<N, D>,
         noise: &AdditiveCoupledNoise<N, D, QD>,
