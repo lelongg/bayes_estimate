@@ -15,7 +15,7 @@ use na::{
 use nalgebra as na;
 
 use crate::linalg::cholesky;
-use crate::mine::matrix::{check_positive, quadform_tr, prod_spd_udu};
+use crate::mine::matrix::{quadform_tr, prod_spd_udu, check_non_negativ};
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -37,7 +37,7 @@ where
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         self.x.copy_from(&state.x);
         self.X.copy_from(&state.X);
-        check_positive(cholesky::UDU::UdUrcond(&self.X), "X not PD")?;
+        check_non_negativ(cholesky::UDU::UdUrcond(&self.X), "X not PSD")?;
 
         Result::Ok(N::one())
     }
@@ -96,10 +96,9 @@ where
         let XHt = &self.X * obs.Hx.transpose();
         // S = Hx.X.Hx' + G.q.G'
         let S = &obs.Hx * &XHt + prod_spd_udu(&noise.Q);
-        let S2 = S.clone();
 
         // Inverse innovation covariance
-        let SI = S.cholesky().ok_or("S not PD in observe")?.inverse();
+        let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
 
         // Kalman gain, X*Hx'*SI
         let W = XHt * SI;
@@ -107,7 +106,7 @@ where
         // State update
         self.x += &W * s;
         // X -= W.S.W'
-        self.X.quadform_tr(N::one().neg(), &W, &S2, N::one());
+        self.X.quadform_tr(N::one().neg(), &W, &S, N::one());
 
         Result::Ok(N::one())
     }

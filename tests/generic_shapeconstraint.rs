@@ -52,7 +52,6 @@ where
 fn zero_from<N: RealField, R: Dim, C: Dim, R1: Dim, C1: Dim>(_r: R, _c: C, _m: &MatrixMN<N, R1, C1>)
 where
     DefaultAllocator: Allocator<N, R1, C1> + Allocator<N, R, C>,
-    // ShapeConstraint: SameNumberOfRows<R, R1> + SameNumberOfColumns<C, C1>,
     ShapeConstraint: DimEq<R, R1> + DimEq<C, C1>,
 {
 }

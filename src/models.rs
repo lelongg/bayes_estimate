@@ -5,10 +5,11 @@
 //! Defines a hierarchy of traits that model discrete systems estimation operations.
 //! State representations are defined by structs
 
-use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
+use na::{allocator::Allocator, DefaultAllocator, Dim, Dynamic, MatrixMN, MatrixN, VectorN};
 use na::SimdRealField;
 use na::storage::Storage;
 use nalgebra as na;
+
 use crate::mine::matrix::MatrixUDU;
 
 /// Kalman State.
@@ -69,6 +70,19 @@ where
     ) -> Result<N, &'static str>;
 }
 
+/// A functional predictor.
+///
+/// Uses a function model with additive noise.
+pub trait FunctionPredictor<N: SimdRealField, D: Dim>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+{
+    fn predict(
+        &mut self,
+        f: fn(&VectorN<N, D>) -> VectorN<N, D>,
+        noise: &AdditiveCorrelatedNoise<N, D>);
+}
+
 /// A linear observer with uncorrelated observation noise.
 ///
 /// Uses a Linear observation model with uncorrelated additive observation noise.
@@ -102,6 +116,21 @@ where
         noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>;
+}
+
+/// A functional observer with correlated observation noise.
+///
+/// Uses a function model with correlated additive observation noise.
+pub trait FunctionObserverCorrelated<N: SimdRealField, D: Dim, ZD: Dim>
+    where
+        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, ZD>
+{
+    fn observe_innovation(
+        &mut self,
+        h: fn(&MatrixMN<N, D, Dynamic>) -> MatrixMN<N, ZD, Dynamic>,
+        noise: &AdditiveCorrelatedNoise<N, ZD>,
+        s: &VectorN<N, ZD>)
+        -> Result<N, &'static str>;
 }
 
 /// Additive noise.

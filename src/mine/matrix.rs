@@ -75,13 +75,25 @@ pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(
     }
 }
 
-/// Checks a the reciprocal condition number is >= 0 .
+/// Checks a the reciprocal condition number is > 0 .
 ///
 /// IEC 559 NaN values are never true
 pub fn check_positive<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str> {
+    if rcond > N::zero() {
+        Result::Ok(rcond)
+    } else {
+        Result::Err(message)
+    }
+}
+
+/// Checks a the reciprocal condition number is >= 0 .
+///
+/// IEC 559 NaN values are never true
+pub fn check_non_negativ<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str> {
     if rcond >= N::zero() {
         Result::Ok(rcond)
     } else {
         Result::Err(message)
     }
 }
+

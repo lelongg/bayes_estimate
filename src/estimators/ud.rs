@@ -76,7 +76,7 @@ where
         let rows = self.UD.nrows();
         matrix::copy_from(&mut self.UD.columns_mut(0, rows), &state.X);
         let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
-        matrix::check_positive(rcond, "X not PD")?;
+        matrix::check_non_negativ(rcond, "X not PSD")?;
 
         Result::Ok(self.udu.one)
     }
@@ -169,7 +169,7 @@ where
 /// Observe Scratch.
 ///
 /// Provides temporary variables for observe calculation.
- pub struct ObserveScratch<N: RealField, D: Dim>
+pub struct ObserveScratch<N: RealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D>,
 {
@@ -198,7 +198,7 @@ where
         // Predict UD from model
         let rcond = UDState::predictGq(self, scratch, &pred.Fx, &noise.G, &noise.q);
 
-        matrix::check_positive(rcond, "X not PSD")
+        matrix::check_non_negativ(rcond, "X not PSD")
     }
 
     pub fn observe_innovation_use_scratch<ZD: Dim>(
