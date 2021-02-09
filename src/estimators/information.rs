@@ -21,7 +21,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive, quadform_tr};
-use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
 use crate::linalg::rcond::rcond_symetric;
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -38,6 +38,15 @@ where
     pub fn init_information(&mut self, information: &InformationState<N, D>) {
         self.i = information.i.clone();
         self.I = information.I.clone();
+    }
+}
+
+impl<N: RealField, D: Dim> Estimator<N, D> for InformationState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+{
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        KalmanEstimator::state(self).map(|r| r.1.x)
     }
 }
 

@@ -16,7 +16,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky;
 use crate::mine::matrix::{quadform_tr, prod_spd_udu, check_non_negativ};
-use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
 where
@@ -27,6 +27,15 @@ where
             x: VectorN::zeros_generic(d, U1),
             X: MatrixN::zeros_generic(d, d),
         }
+    }
+}
+
+impl<N: RealField, D: Dim> Estimator<N, D> for KalmanState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+{
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        Result::Ok(self.x.clone())
     }
 }
 

@@ -40,6 +40,16 @@ where
     pub I: MatrixN<N, D>,
 }
 
+/// A state estimator.
+///
+pub trait Estimator<N: SimdRealField, D: Dim>
+    where
+        DefaultAllocator: Allocator<N, D>,
+{
+    /// The estimator's estimate of the system's state.
+    fn state(&self) -> Result<VectorN<N, D>, &'static str>;
+}
+
 /// A Kalman filter (estimator).
 ///
 /// The linear Kalman state representation x,X is used to represent the system.

@@ -20,7 +20,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
-use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
 
 /// UD State representation.
 ///
@@ -59,6 +59,15 @@ where
             x: VectorN::zeros_generic(d, U1),
             udu: UDU::new(),
         }
+    }
+}
+
+impl<N: RealField, D: Dim, XUD: Dim> Estimator<N, D> for UDState<N, D, XUD>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
+{
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        KalmanEstimator::state(self).map(|r| r.1.x)
     }
 }
 

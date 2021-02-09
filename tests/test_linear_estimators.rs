@@ -26,7 +26,7 @@ use bf::models::{
 };
 
 use approx;
-use bayes_filter::models::{AdditiveCorrelatedNoise, AdditiveCoupledNoise};
+use bayes_filter::models::{AdditiveCorrelatedNoise, AdditiveCoupledNoise, Estimator};
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -97,10 +97,14 @@ fn sqr(x: f64) -> f64 {
 
 /// Define the estimator operations to be tested.
 trait TestEstimator<D: Dim>:
-    KalmanEstimator<f64, D> + LinearPredictor<f64, D, U1>
+    Estimator<f64, D> + KalmanEstimator<f64, D> + LinearPredictor<f64, D, U1>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
+    fn dim(&self) -> D {
+        return Estimator::state(self).unwrap().data.shape().0;
+    }
+
     fn trace_state(&self) {}
 
     /// Observation with uncorrelected noise
@@ -160,6 +164,10 @@ impl<D: Dim> TestEstimator<D> for InformationState<f64, D>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
+    fn dim(&self) -> D {
+        return self.i.data.shape().0;
+    }
+
     fn observe_innov_un(
         &mut self,
         obs: &LinearObserveModel<f64, D, U1>,
@@ -266,8 +274,7 @@ where
         + Allocator<usize, D, D>
         + Allocator<usize, D>,
 {
-    let state = est.state().unwrap().1;
-    let d = state.x.data.shape().0;
+    let d = est.dim();
 
     let f_vv: f64 = (-DT * V_GAMMA).exp();
 
@@ -298,11 +305,11 @@ where
     check(est.init(&init_state), "init").unwrap();
     est.trace_state();
 
-    let xx = est.state().unwrap().1;
+    let xx = KalmanEstimator::state(est).unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
 
     for _c in 0..2 {
-        let predict_x = est.state().unwrap().1.x;
+        let predict_x = Estimator::state(est).unwrap();
         let predict_xp = fx(&predict_x);
         check(
             est.predict(&linear_pred_model, predict_xp, &additive_noise),
@@ -310,7 +317,7 @@ where
         )
         .unwrap();
 
-        let obs_x = est.state().unwrap().1.x;
+        let obs_x = Estimator::state(est).unwrap();
         let s = z - hx(&obs_x);
         check(
             est.observe_innov_un(&linear_obs_model, &un_obs_noise, &s, &obs_x),
@@ -319,14 +326,14 @@ where
         .unwrap();
     }
 
-    let obs_x = est.state().unwrap().1.x;
+    let obs_x = Estimator::state(est).unwrap();
     let s = z - hx(&obs_x);
     check(
         est.observe_linear_co(&linear_obs_model, &co_obs_noise, &s, &obs_x),
         "obs_linear",
     )
     .unwrap();
-    let xx = est.state().unwrap().1;
+    let xx = KalmanEstimator::state(est).unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
