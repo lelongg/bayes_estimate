@@ -14,13 +14,13 @@
 
 use na::base::storage::Storage;
 use na::{allocator::Allocator, DefaultAllocator};
-use na::{DMatrix, DimAdd, DimSum, Dynamic, MatrixMN, MatrixN, VectorN, U1};
+use na::{DMatrix, Dynamic, MatrixMN, MatrixN, VectorN, U1};
 use na::{Dim, RealField};
 use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
-use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
+use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, AdditiveCoupledNoise, Estimator};
 
 /// UD State representation.
 ///
@@ -60,6 +60,42 @@ where
             udu: UDU::new(),
         }
     }
+
+    pub fn predict<QD: Dim>(
+        &mut self,
+        pred: &LinearPredictModel<N, D>,
+        x_pred: VectorN<N, D>,
+        noise: &AdditiveCoupledNoise<N, D, QD>,
+    ) -> Result<N, &'static str>
+        where
+            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>
+    {
+        let mut scratch = self.new_predict_scratch();
+        self.predict_use_scratch(&mut scratch, pred, x_pred, noise)
+    }
+
+    /// Implement observe using sequential observation updates.
+    ///
+    /// Uncorrelated observations are applied sequentially in the order they appear in z.
+    ///
+    /// Therefore the model of each observation needs to be computed sequentially. Generally this
+    /// is inefficient and observe (UD_sequential_observe_model&) should be used instead
+    //// Return: Minimum rcond of all sequential observe
+    pub fn observe_innovation<ZD: Dim>(
+        &mut self,
+        obs: &LinearObserveModel<N, D, ZD>,
+        noise: &AdditiveNoise<N, ZD>,
+        s: &VectorN<N, ZD>,
+    ) -> Result<N, &'static str>
+    where
+        DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
+    {
+        let mut scratch = self.new_observe_scratch();
+
+        // Predict UD from model
+        UDState::observe_innovation_use_scratch(self, &mut scratch, obs, noise, s)
+    }
+
 }
 
 impl<N: RealField, D: Dim, XUD: Dim> Estimator<N, D> for UDState<N, D, XUD>
@@ -107,59 +143,6 @@ where
                 X,
             },
         ))
-    }
-}
-
-impl<N: RealField, D: DimAdd<QD>, QD: Dim> LinearPredictor<N, D, QD>
-    for UDState<N, D, DimSum<D, QD>>
-where
-    DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, D, QD>
-        + Allocator<N, D, DimSum<D, QD>>
-        + Allocator<N, D>
-        + Allocator<N, QD>
-        + Allocator<N, DimSum<D, QD>>,
-{
-    fn predict(
-        &mut self,
-        pred: &LinearPredictModel<N, D>,
-        x_pred: VectorN<N, D>,
-        noise: &AdditiveCoupledNoise<N, D, QD>,
-    ) -> Result<N, &'static str> {
-        let mut scratch = self.new_predict_scratch();
-        self.predict_use_scratch(&mut scratch, pred, x_pred, noise)
-    }
-}
-
-impl<N: RealField, D: Dim, XUD: Dim, ZD: Dim> LinearObserverUncorrelated<N, D, ZD>
-    for UDState<N, D, XUD>
-where
-    DefaultAllocator: Allocator<N, ZD, ZD>
-        + Allocator<N, D, D>
-        + Allocator<N, ZD, D>
-        + Allocator<N, D, ZD>
-        + Allocator<N, D, XUD>
-        + Allocator<N, D>
-        + Allocator<N, ZD>
-        + Allocator<N, XUD>
-{
-    /// Implement observe using sequential observation updates.
-    ///
-    /// Uncorrelated observations are applied sequentially in the order they appear in z.
-    ///
-    /// Therefore the model of each observation needs to be computed sequentially. Generally this
-    /// is inefficient and observe (UD_sequential_observe_model&) should be used instead
-    //// Return: Minimum rcond of all sequential observe
-    fn observe_innovation(
-        &mut self,
-        obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
-    ) -> Result<N, &'static str> {
-        let mut scratch = self.new_observe_scratch();
-
-        // Predict UD from model
-        UDState::observe_innovation_use_scratch(self, &mut scratch, obs, noise, s)
     }
 }
 
@@ -307,8 +290,9 @@ where
                 rcondmin = rcond;
             }
             // State update using linear innovation
-            let s = zp[o] - zpdecol[o];
+            let s = z[o] - zpdecol[o];
             self.x += &scratch.w * s;
+            println!("{:?} {:?} {:?}", self.x, scratch.w, s)
         }
         Result::Ok(rcondmin)
     }
@@ -319,7 +303,7 @@ where
     DefaultAllocator:
         Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, XUD> + Allocator<N, D>,
 {
-    fn new_predict_scratch(&self) -> PredictScratch<N, XUD> {
+    pub fn new_predict_scratch(&self) -> PredictScratch<N, XUD> {
         let ud_col_vec_shape = (self.UD.data.shape().1, U1);
         PredictScratch {
             d: matrix::as_zeros(ud_col_vec_shape),
@@ -328,7 +312,7 @@ where
         }
     }
 
-    fn new_observe_scratch(&self) -> ObserveScratch<N, D> {
+    pub fn new_observe_scratch(&self) -> ObserveScratch<N, D> {
         let x_vec_shape = self.x.data.shape();
         ObserveScratch {
             w: matrix::as_zeros(x_vec_shape),

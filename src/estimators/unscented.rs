@@ -15,8 +15,9 @@ use nalgebra::{Dynamic, MatrixMN};
 use nalgebra::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
-use crate::models::{AdditiveCorrelatedNoise, KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserverCorrelated};
+use crate::models::{AdditiveCorrelatedNoise, KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserverCorrelated, Estimator};
 use crate::mine::matrix::check_non_negativ;
+use crate::mine::matrix;
 
 pub struct UnscentedKallmanState<N: RealField, D: Dim>
     where
@@ -70,12 +71,15 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
 impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for UnscentedKallmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, U1, ZD> + Allocator<N, D> + Allocator<N, ZD> {
-    fn observe_innovation(&mut self, h: fn(&MatrixMN<N, D, Dynamic>) -> MatrixMN<N, ZD, Dynamic>, noise: &AdditiveCorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<N, &'static str> {
+    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>, noise: &AdditiveCorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<N, &'static str> {
         // Create Unscented distribution
         unscented(&mut self.UU, &self.xX, self.kappa)?;
 
-        // Predict points of XX using supplied observation model
-        let ZZ = h(&self.UU);
+        // Predict points of ZZ using supplied observation model
+        let mut ZZ = matrix::as_zeros((s.data.shape().0, self.UU.data.shape().1));
+        for z in 0..ZZ.data.shape().1.value() {
+            ZZ.column_mut(z).copy_from(&h(&self.UU.column(z).clone_owned()))
+        }
 
         let mut zZ = KalmanState::<N, ZD>::new(ZZ.data.shape().0);
         kalman(&mut zZ, &ZZ, self.kappa);
@@ -177,6 +181,15 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN
         state.X += &(XXi * XXit);
     }
     state.X /= two * x_kappa;
+}
+
+impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, Dynamic> + Allocator<N, U1, D> + Allocator<N, D>,
+{
+    fn state(&self) -> Result<VectorN<N,D>, &'static str> {
+        return Result::Ok(self.xX.x.clone());
+    }
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>

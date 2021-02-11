@@ -20,7 +20,7 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, RealFie
 use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
-use crate::mine::matrix::{check_positive, quadform_tr};
+use crate::mine::matrix::{check_positive};
 use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
 use crate::linalg::rcond::rcond_symetric;
 
@@ -77,20 +77,15 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for InformationState<N, D>
+impl<N: RealField, D: Dim> LinearPredictor<N, D> for InformationState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, QD, QD>
-        + Allocator<N, D, QD>
-        + Allocator<N, QD, D>
-        + Allocator<N, D>
-        + Allocator<N, QD>,
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     fn predict(
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCoupledNoise<N, D, QD>,
+        noise: &AdditiveCorrelatedNoise<N, D>,
     ) -> Result<N, &'static str> {
         // Covariance
         let mut X = self.I.clone();
@@ -99,7 +94,7 @@ where
 
         // Predict information matrix, and state covariance
         X.quadform_tr(N::one(), &pred.Fx, &X.clone(), N::zero());
-        quadform_tr(&mut X, N::one(), &noise.G, &noise.q, N::one());
+        X += &noise.Q;
 
         self.init(&KalmanState { x: x_pred, X })
     }
