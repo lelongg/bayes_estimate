@@ -292,7 +292,6 @@ where
             // State update using linear innovation
             let s = z[o] - zpdecol[o];
             self.x += &scratch.w * s;
-            println!("{:?} {:?} {:?}", self.x, scratch.w, s)
         }
         Ok(rcondmin)
     }
