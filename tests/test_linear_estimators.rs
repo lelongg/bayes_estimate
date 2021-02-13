@@ -37,7 +37,7 @@ const OBS_NOISE: f64 = 0.001;
 
 // Minimum allowable reciprocal condition number for PD Matrix factorisations
 // Use 1e5  * epsilon give 5 decimal digits of headroom
-const LIMIT_PD: f64 = std::f64::EPSILON * 1e5;
+const LIMIT_PD: f64 = f64::EPSILON * 1e5;
 
 
 #[test]
@@ -68,6 +68,11 @@ fn test_information_dynamic() {
 #[test]
 fn test_ud_dynamic() {
     test_estimator(&mut UDState::new(Dynamic::new(2), Dynamic::new(3)));
+}
+
+#[test]
+fn test_unscented_dynamic() {
+    test_estimator(&mut UnscentedKallmanState::new(Dynamic::new(2)));
 }
 
 
@@ -123,7 +128,7 @@ where
         noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         _x: &VectorN<f64, D>,
-    ) -> Result<f64, &'static str>;
+    ) -> Result<(), &'static str>;
 }
 
 /// Test covariance estimator operations defined on a KalmanState.
@@ -149,7 +154,7 @@ where
         noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         _x: &VectorN<f64, D>,
-    ) -> Result<f64, &'static str>
+    ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
@@ -183,13 +188,13 @@ where
         noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         x: &VectorN<f64, D>,
-    ) -> Result<f64, &'static str>
+    ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
         let info = self.observe_innovation_co(obs, noise, s, x)?;
         self.add_information(&info.1);
-        Result::Ok(info.0)
+        Result::Ok(())
     }
 }
 
@@ -219,10 +224,10 @@ where
         noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         x: &VectorN<f64, D>,
-    ) -> Result<f64, &'static str> {
+    ) -> Result<(), &'static str> {
         let z = s + h(x);
 
-        self.observe_decorrelate::<U1>(obs, noise, &z)
+        self.observe_decorrelate::<U1>(obs, noise, &z).map(|_rcond| {})
     }
 }
 
@@ -243,7 +248,7 @@ impl<D: DimAdd<U1>> TestEstimator<D> for UnscentedKallmanState<f64, D>
         _x_pred: VectorN<f64, D>,
         noise: &AdditiveCoupledNoise<f64, D, U1>)
     {
-        FunctionPredictor::predict(self, f, &AdditiveCorrelatedNoise::from_coupled::<U1>(noise))
+        FunctionPredictor::predict(self, f, &AdditiveCorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
@@ -253,7 +258,7 @@ impl<D: DimAdd<U1>> TestEstimator<D> for UnscentedKallmanState<f64, D>
         noise: &AdditiveCorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
         _x: &VectorN<f64, D>,
-    ) -> Result<f64, &'static str> {
+    ) -> Result<(), &'static str> {
         FunctionObserverCorrelated::<f64, D, U1>::observe_innovation(self, h, noise, s)
     }
 }
@@ -329,23 +334,21 @@ where
         let predict_x = Estimator::state(est).unwrap();
         let predict_xp = fx(&predict_x);
         est.predict_fn(fx, &linear_pred_model, predict_xp, &additive_noise);
+        let pp = KalmanEstimator::state(est).unwrap().1;
+        println!("pred={:.6}{:.6}", pp.x, pp.X);
 
         let obs_x = Estimator::state(est).unwrap();
         let s = z - hx(&obs_x);
-        check(
-            est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x),
-            "obs",
-        )
-        .unwrap();
+        est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x).unwrap();
+
+        let oo = KalmanEstimator::state(est).unwrap().1;
+        println!("obs={:.6}{:.6}", oo.x, oo.X);
     }
 
     let obs_x = Estimator::state(est).unwrap();
     let s = z - hx(&obs_x);
-    check(
-        est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x),
-        "obs_linear",
-    )
-    .unwrap();
+    est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x).unwrap();
+
     let xx = KalmanEstimator::state(est).unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
 

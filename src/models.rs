@@ -2,8 +2,8 @@
 
 //! Bayesian estimation models.
 //!
-//! Defines a hierarchy of traits that model discrete systems estimation operations.
-//! State representations are defined by structs
+//! State representations are modeled as structs.
+//! Common Bayesian discrete system estimation operations are defined as traits.
 
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
 use na::SimdRealField;
@@ -79,7 +79,7 @@ where
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
         noise: &AdditiveCorrelatedNoise<N, D>,
-    ) -> Result<N, &'static str>;
+    ) -> Result<(), &'static str>;
 }
 
 /// A functional predictor.
@@ -92,7 +92,7 @@ pub trait FunctionPredictor<N: SimdRealField, D: Dim>
     fn predict(
         &mut self,
         f: fn(&VectorN<N, D>) -> VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D>);
+        noise: &AdditiveCorrelatedNoise<N, D>) -> Result<(), &'static str>;
 }
 
 /// A linear observer with correlated observation noise.
@@ -108,7 +108,7 @@ where
         obs: &LinearObserveModel<N, D, ZD>,
         noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
-    ) -> Result<N, &'static str>;
+    ) -> Result<(), &'static str>;
 }
 
 /// A functional observer with correlated observation noise.
@@ -123,7 +123,7 @@ pub trait FunctionObserverCorrelated<N: SimdRealField, D: Dim, ZD: Dim>
         h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
         noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>)
-        -> Result<N, &'static str>;
+        -> Result<(), &'static str>;
 }
 
 /// Additive noise.
@@ -196,7 +196,7 @@ impl<'a, N: RealField, D: Dim> AdditiveCorrelatedNoise<N, D>
         let mut Q = MatrixMN::zeros_generic(coupled.G.data.shape().0, coupled.G.data.shape().0);
         matrix::quadform_tr(&mut Q, N::one(), &coupled.G, &coupled.q, N::one());
         AdditiveCorrelatedNoise{
-            Q: Q
+            Q
         }
     }
 }

@@ -71,13 +71,13 @@ where
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
         noise: &AdditiveCorrelatedNoise<N, D>,
-    ) -> Result<N, &'static str> {
+    ) -> Result<(), &'static str> {
         self.x = x_pred;
         // X = Fx.X.FX' + Q
         self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
         self.X += &noise.Q;
 
-        Result::Ok(N::one())
+        Result::Ok(())
     }
 }
 
@@ -96,7 +96,7 @@ where
         obs: &LinearObserveModel<N, D, ZD>,
         noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
-    ) -> Result<N, &'static str> {
+    ) -> Result<(), &'static str> {
         let XHt = &self.X * obs.Hx.transpose();
         // S = Hx.X.Hx' + G.q.G'
         let S = &obs.Hx * &XHt + prod_spd_udu(&noise.Q);
@@ -112,7 +112,7 @@ where
         // X -= W.S.W'
         self.X.quadform_tr(N::one().neg(), &W, &S, N::one());
 
-        Result::Ok(N::one())
+        Result::Ok(())
     }
 }
 

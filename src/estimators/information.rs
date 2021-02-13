@@ -86,7 +86,7 @@ where
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
         noise: &AdditiveCorrelatedNoise<N, D>,
-    ) -> Result<N, &'static str> {
+    ) -> Result<(), &'static str> {
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
@@ -96,7 +96,9 @@ where
         X.quadform_tr(N::one(), &pred.Fx, &X.clone(), N::zero());
         X += &noise.Q;
 
-        self.init(&KalmanState { x: x_pred, X })
+        self.init(&KalmanState { x: x_pred, X })?;
+
+        return Result::Ok(())
     }
 }
 
