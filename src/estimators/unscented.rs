@@ -77,24 +77,30 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for Uns
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, U1, ZD> + Allocator<N, D> + Allocator<N, ZD> {
     fn observe_innovation(&mut self, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>, noise: &AdditiveCorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
         // Create Unscented distribution
-        unscented(&mut self.UU, &self.xX, self.kappa)?;
+        let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
+        unscented(&mut self.UU, &self.xX, x_kappa)?;
 
         // Predict points of ZZ using supplied observation model
         let mut ZZ = matrix::as_zeros((s.data.shape().0, self.UU.data.shape().1));
-        for z in 0..ZZ.data.shape().1.value() {
+        for z in 0..ZZ.ncols() {
             ZZ.column_mut(z).copy_from(&h(&self.UU.column(z).clone_owned()))
         }
 
+        // Mean and covarnaic of observation distribution
         let mut zZ = KalmanState::<N, ZD>::new(ZZ.data.shape().0);
         kalman(&mut zZ, &ZZ, self.kappa);
+        for i in 0..ZZ.ncols() {
+            &ZZ.column_mut(i).sub_assign(&zZ.x);
+        }
 
         let two = N::from_u32(2).unwrap();
 
         // Correlation of state with observation: Xxz
         // Center point, premult here by 2 for efficiency
+        let x = &self.xX.x;
         let mut XZ;
         {
-            let XX0 = (self.UU.column(0) - &self.xX.x).clone_owned();
+            let XX0 = (self.UU.column(0) - x).clone_owned();
             let ZZ0t = ZZ.column(0).transpose();
             XZ = XX0 * ZZ0t;
             XZ *= two * self.kappa;
@@ -102,11 +108,11 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for Uns
 
         // Remaining Unscented points
         for i in 1..ZZ.ncols() {
-            let XXi = (self.UU.column(i) - &self.xX.x).clone_owned();
+            let XXi = (self.UU.column(i) - x).clone_owned();
             let ZZit = ZZ.column(i).transpose();
             XZ += XXi * ZZit;
         }
-        XZ /= two * self.kappa;
+        XZ /= two * x_kappa;
 
         let S = zZ.X + &noise.Q;
 
@@ -114,7 +120,7 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for Uns
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
 
         // Kalman gain, X*Hx'*SI
-        let W = XZ * SI;
+        let W = &XZ * SI;
 
         // State update
         self.xX.x += &W * s;
@@ -134,6 +140,7 @@ pub fn unscented<N: RealField, D: Dim>(UU: &mut MatrixMN<N, D, Dynamic>, xX: &Ka
 
     let mut sigma = xX.X.clone();
     let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
+
     check_non_negativ(rcond, "Unscented X not PSD")?;
     sigma *= scale.simd_sqrt();
 
@@ -159,8 +166,7 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN
     let half = N::one() / two;
 
     let mut tXX = XX.clone();
-    let xsize = XX.nrows();
-    let x_scale = N::from_usize(xsize).unwrap() + scale;
+    let x_scale = N::from_usize((XX.ncols()-1)/2).unwrap() + scale;
     // Mean of predicted distribution: x
     state.x = tXX.column(0) * scale;
     for i in 1..tXX.ncols() {
@@ -179,7 +185,7 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN
         state.X.copy_from(&(XX0 * XX0t));
     }
     // Remaining Unscented points
-    for i in 1..xsize {
+    for i in 1..tXX.ncols() {
         let XXi = tXX.column(i);
         let XXit = XXi.transpose();
         state.X += &(XXi * XXit);

@@ -35,6 +35,7 @@ const I_V_NOISE: f64 = 10.;
 // Noise on observing system state
 const OBS_NOISE: f64 = 0.001;
 
+
 // Minimum allowable reciprocal condition number for PD Matrix factorisations
 // Use 1e5  * epsilon give 5 decimal digits of headroom
 const LIMIT_PD: f64 = f64::EPSILON * 1e5;
@@ -269,8 +270,11 @@ fn fx<D: Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
 where
     DefaultAllocator: Allocator<f64, D>,
 {
+    let f_vv: f64 = (-DT * V_GAMMA).exp();
+
     let mut xp = (*x).clone();
     xp[0] += DT * x[1];
+    xp[1] *= f_vv;
     xp
 }
 
@@ -360,7 +364,7 @@ fn expect_state<D : Dim>(state: &KalmanState<f64, D>)
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
 {
-    let expect_x = Vector2::new(1000., 0.0152);
+    let expect_x = Vector2::new(1000.000001, 0.000225);
     approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001);
     approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01);
 

@@ -290,6 +290,8 @@ impl<N: RealField> UDU<N> {
             }
         }
 
+        self.Lzero(M);
+
         // Estimate the reciprocal condition number
         self.UCrcond(M)
     }

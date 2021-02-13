@@ -103,9 +103,8 @@ where
 
         // Inverse innovation covariance
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
-
         // Kalman gain, X*Hx'*SI
-        let W = XHt * SI;
+        let W = &XHt * SI;
 
         // State update
         self.x += &W * s;
