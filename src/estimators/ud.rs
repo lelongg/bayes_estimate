@@ -123,7 +123,7 @@ where
         let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
         matrix::check_non_negativ(rcond, "X not PSD")?;
 
-        Result::Ok(self.udu.one)
+        Ok(self.udu.one)
     }
 
     /// Derive the KalmanState from the UDState.
@@ -136,7 +136,7 @@ where
         matrix::copy_from(&mut X, &self.UD.columns(0, self.UD.nrows()));
         UDU::UdUrecompose(&mut X);
 
-        Result::Ok((
+        Ok((
             self.udu.one,
             KalmanState {
                 x: self.x.clone(),
@@ -212,7 +212,7 @@ where
         for o in 0..z_size {
             // Check noise precondition
             if noise.q[o] < self.udu.zero {
-                return Result::Err("Zv not PSD in observe");
+                return Err("Zv not PSD in observe");
             }
             // Update UD and extract gain
             let mut S = self.udu.zero;
@@ -225,7 +225,7 @@ where
             scratch.w *= s[0];
             self.x += &scratch.w;
         }
-        Result::Ok(rcondmin)
+        Ok(rcondmin)
     }
 
     /// Special Linear Hx observe for correlated Z.
@@ -294,7 +294,7 @@ where
             self.x += &scratch.w * s;
             println!("{:?} {:?} {:?}", self.x, scratch.w, s)
         }
-        Result::Ok(rcondmin)
+        Ok(rcondmin)
     }
 }
 

@@ -35,7 +35,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for KalmanState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        Result::Ok(self.x.clone())
+        Ok(self.x.clone())
     }
 }
 
@@ -48,11 +48,11 @@ where
         self.X.copy_from(&state.X);
         check_non_negativ(cholesky::UDU::UdUrcond(&self.X), "X not PSD")?;
 
-        Result::Ok(N::one())
+        Ok(N::one())
     }
 
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        Result::Ok((
+        Ok((
             N::one(),
             KalmanState {
                 x: self.x.clone(),
@@ -77,7 +77,7 @@ where
         self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
         self.X += &noise.Q;
 
-        Result::Ok(())
+        Ok(())
     }
 }
 
@@ -112,7 +112,7 @@ where
         // X -= W.S.W'
         self.X.quadform_tr(N::one().neg(), &W, &S, N::one());
 
-        Result::Ok(())
+        Ok(())
     }
 }
 

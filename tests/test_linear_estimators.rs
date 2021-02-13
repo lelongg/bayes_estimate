@@ -85,12 +85,12 @@ fn check(res: Result<f64, &'static str>, what: &'static str) -> Result<f64, Stri
         Ok(_) => {
             let rcond = res.unwrap();
             if rcond > LIMIT_PD {
-                Result::Ok(rcond)
+                Ok(rcond)
             } else {
-                Result::Err(format!("{}: {}", what, rcond))
+                Err(format!("{}: {}", what, rcond))
             }
         }
-        Err(err) => Result::Err(err.to_string()),
+        Err(err) => Err(err.to_string()),
     }
 }
 
@@ -194,7 +194,7 @@ where
     {
         let info = self.observe_innovation_co(obs, noise, s, x)?;
         self.add_information(&info.1);
-        Result::Ok(())
+        Ok(())
     }
 }
 

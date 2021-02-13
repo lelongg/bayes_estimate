@@ -62,7 +62,7 @@ where
         // Information state
         self.i = &self.I * &state.x;
 
-        Result::Ok(rcond)
+        Ok(rcond)
     }
 
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
@@ -73,7 +73,7 @@ where
         // State
         let x = &X * &self.i;
 
-        Result::Ok((rcond, KalmanState { x, X }))
+        Ok((rcond, KalmanState { x, X }))
     }
 }
 
@@ -98,7 +98,7 @@ where
 
         self.init(&KalmanState { x: x_pred, X })?;
 
-        return Result::Ok(())
+        return Ok(())
     }
 }
 
@@ -132,7 +132,7 @@ where
         for i in 0..noise.q.nrows() {
             if noise.q[i] < N::zero() {
                 // allow PSD q, let infinity propagate into B
-                return Result::Err("q not PSD");
+                return Err("q not PSD");
             }
             B[(i, i)] += N::one() / noise.q[i];
         }
@@ -151,7 +151,7 @@ where
         let y = pred_inv.Fx.transpose() * &self.i;
         self.i = &ig * &y;
 
-        Result::Ok(rcond)
+        Ok(rcond)
     }
 
     pub fn add_information(&mut self, information: &InformationState<N, D>) {
@@ -179,7 +179,7 @@ where
         let mut ZI = noise.Q.clone();
         let singular = udu.UdUinverse(&mut ZI);
         if singular {
-            return Result::Err("Z not PD");
+            return Err("Z not PD");
         }
         UDU::UdUrecompose_transpose(&mut ZI);
 
@@ -189,7 +189,7 @@ where
         // Calculate EIF I = Hx'*ZI*Hx
         let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 
-        Result::Ok((rcond_symetric(&noise.Q), InformationState { i: ii, I: II }))
+        Ok((rcond_symetric(&noise.Q), InformationState { i: ii, I: II }))
     }
 
     pub fn observe_innovation_un<ZD: Dim>(
@@ -222,6 +222,6 @@ where
         // Calculate EIF I = Hx'*ZI*Hx
         let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 
-        Result::Ok((rcond, InformationState { i: ii, I: II }))
+        Ok((rcond, InformationState { i: ii, I: II }))
     }
 }

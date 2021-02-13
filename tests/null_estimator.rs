@@ -44,7 +44,7 @@ where
         x_pred: VectorN<N, D>,
         noise: &AdditiveCoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str> {
-        Result::Ok(N::one())
+        Ok(N::one())
     }
 }
 
@@ -64,7 +64,7 @@ where
         noise: &AdditiveCorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
-        Result::Ok(N::one())
+        Ok(N::one())
     }
 }
 
@@ -84,6 +84,6 @@ where
         noise: &AdditiveNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
-        Result::Ok(N::one())
+        Ok(N::one())
     }
 }

@@ -27,7 +27,7 @@ pub struct UnscentedKallmanState<N: RealField, D: Dim>
     pub xX: KalmanState<N, D>,
     /// Unscented state
     pub UU: MatrixMN<N, D, Dynamic>,
-    pub kappa: N
+    pub kappa: N,
 }
 
 impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
@@ -38,7 +38,7 @@ impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
         UnscentedKallmanState {
             xX: KalmanState::new(d),
             UU: MatrixMN::zeros_generic(d, Dynamic::new(d.value() * 2 + 1)),
-            kappa: N::from_usize(3 - d.value()).unwrap()
+            kappa: N::from_usize(3 - d.value()).unwrap(),
         }
     }
 }
@@ -68,7 +68,7 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
         // Additive Noise
         self.xX.X += &noise.Q;
 
-        Result::Ok(())
+        Ok(())
     }
 }
 
@@ -121,7 +121,7 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for Uns
         // X -= W.S.W'
         self.xX.X.quadform_tr(N::one().neg(), &W, &S, N::one());
 
-        Result::Ok(())
+        Ok(())
     }
 }
 
@@ -148,7 +148,7 @@ pub fn unscented<N: RealField, D: Dim>(UU: &mut MatrixMN<N, D, Dynamic>, xX: &Ka
         UU.column_mut(c + 1 + xsize).copy_from(&xm);
     }
 
-    Result::Ok(rcond)
+    Ok(rcond)
 }
 
 pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN<N, D, Dynamic>, scale: N)
@@ -191,8 +191,8 @@ impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, Dynamic> + Allocator<N, U1, D> + Allocator<N, D>,
 {
-    fn state(&self) -> Result<VectorN<N,D>, &'static str> {
-        return Result::Ok(self.xX.x.clone());
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        return Ok(self.xX.x.clone());
     }
 }
 
@@ -205,11 +205,11 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>
         self.xX.X.copy_from(&state.X);
         check_non_negativ(cholesky::UDU::UdUrcond(&self.xX.X), "X not PSD")?;
 
-        Result::Ok(N::one())
+        Ok(N::one())
     }
 
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        return Result::Ok(
+        return Ok(
             (N::one(), self.xX.clone())
         );
     }
