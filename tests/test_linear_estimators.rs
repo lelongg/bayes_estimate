@@ -125,11 +125,10 @@ where
     /// Observation with correlected noise
     fn observe(
         &mut self,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
-        _x: &VectorN<f64, D>,
     ) -> Result<(), &'static str>;
 }
 
@@ -151,11 +150,10 @@ where
 
     fn observe(
         &mut self,
-        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        _h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
-        _x: &VectorN<f64, D>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
@@ -185,17 +183,17 @@ where
 
     fn observe(
         &mut self,
-        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
-        x: &VectorN<f64, D>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
+        let x = self.state().unwrap();
         let noise_inv = CorrelatedNoise{ Q: noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse()};
-        let info = self.observe_innovation(obs, &noise_inv, s, x);
+        let info = self.observe_info(obs, &noise_inv, &(s + h(&x, &x)));
         self.add_information(&info);
         Ok(())
     }
@@ -222,13 +220,13 @@ where
 
     fn observe(
         &mut self,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
         obs: &LinearObserveModel<f64, D, U1>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
-        x: &VectorN<f64, D>,
     ) -> Result<(), &'static str> {
-        let z = s + h(x);
+        let x = &self.x;
+        let z = s + h(x, x);
         let udu = UDU::new();
         let mut ud: MatrixMN<f64,U1,U1> = noise.Q.clone_owned();
         udu.UdUfactor_variant2(&mut ud, s.nrows());
@@ -260,11 +258,10 @@ impl<D: DimAdd<U1>> TestEstimator<D> for UnscentedKallmanState<f64, D>
 
     fn observe(
         &mut self,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
         _obs: &LinearObserveModel<f64, D, U1>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
-        _x: &VectorN<f64, D>,
     ) -> Result<(), &'static str> {
         FunctionObserver::<f64, D, U1>::observe_innovation(self, h, noise, s)
     }
@@ -285,7 +282,7 @@ where
 }
 
 /// Simple observation model.
-fn hx<D: Dim>(x: &VectorN<f64, D>) -> Vector1<f64>
+fn hx<D: Dim>(x: &VectorN<f64, D>, _xmean: &VectorN<f64, D>) -> Vector1<f64>
 where
     DefaultAllocator: Allocator<f64, D>,
 {
@@ -337,29 +334,29 @@ where
     check(est.init(&init_state), "init").unwrap();
     est.trace_state();
 
-    let xx = KalmanEstimator::state(est).unwrap().1;
+    let xx = KalmanEstimator::kalman_state(est).unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
 
     for _c in 0..2 {
         let predict_x = Estimator::state(est).unwrap();
         let predict_xp = fx(&predict_x);
         est.predict_fn(fx, &linear_pred_model, predict_xp, &additive_noise);
-        let pp = KalmanEstimator::state(est).unwrap().1;
+        let pp = KalmanEstimator::kalman_state(est).unwrap().1;
         println!("pred={:.6}{:.6}", pp.x, pp.X);
 
         let obs_x = Estimator::state(est).unwrap();
-        let s = z - hx(&obs_x);
-        est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x).unwrap();
+        let s = z - hx(&obs_x, &obs_x);
+        est.observe(hx, &linear_obs_model, &co_obs_noise, &s).unwrap();
 
-        let oo = KalmanEstimator::state(est).unwrap().1;
+        let oo = KalmanEstimator::kalman_state(est).unwrap().1;
         println!("obs={:.6}{:.6}", oo.x, oo.X);
     }
 
     let obs_x = Estimator::state(est).unwrap();
-    let s = z - hx(&obs_x);
-    est.observe(hx, &linear_obs_model, &co_obs_noise, &s, &obs_x).unwrap();
+    let s = z - hx(&obs_x, &obs_x);
+    est.observe(hx, &linear_obs_model, &co_obs_noise, &s).unwrap();
 
-    let xx = KalmanEstimator::state(est).unwrap().1;
+    let xx = KalmanEstimator::kalman_state(est).unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });

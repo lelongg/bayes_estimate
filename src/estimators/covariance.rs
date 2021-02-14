@@ -5,7 +5,7 @@
 //! A discrete Bayesian estimator that uses a Kalman state representation [`KalmanState`] of the system for estimation.
 //! The Kalman state is simply the x,X pair the dimensions of both are the dimensions of the system.
 //!
-//! The linear Kalman state representation can also be used for non-linear system by using linearised forms of the system model.
+//! The linear Kalman state representation can also be used for non-linear systems by using linearised forms of the system model.
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
@@ -52,7 +52,7 @@ where
         Ok(rcond)
     }
 
-    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
         Ok((
             N::one(),
             KalmanState {

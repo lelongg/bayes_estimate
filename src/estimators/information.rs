@@ -45,7 +45,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for InformationState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        KalmanEstimator::state(self).map(|r| r.1.x)
+        KalmanEstimator::kalman_state(self).map(|r| r.1.x)
     }
 }
 
@@ -64,7 +64,7 @@ where
         Ok(rcond)
     }
 
-    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
         // Covariance
         let mut X = self.I.clone();
         let rcond = UDU::new().UdUinversePD(&mut X);
@@ -158,12 +158,11 @@ where
         self.I += &information.I;
     }
 
-    pub fn observe_innovation<ZD: Dim>(
+    pub fn observe_info<ZD: Dim>(
         &self,
         obs: &LinearObserveModel<N, D, ZD>,
         noise_inverted: &CorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
-        x: &VectorN<N, D>,
+        z: &VectorN<N, ZD>
     ) -> InformationState<N, D>
     where
         DefaultAllocator: Allocator<N, ZD, ZD>
@@ -171,12 +170,10 @@ where
             + Allocator<N, D, ZD>
             + Allocator<N, ZD>
     {
-        let zz = s + &obs.Hx * x; // Strange EIF observation object
-
         // Observation Information
         let HxTZI = obs.Hx.transpose() * &noise_inverted.Q;
-        // Calculate EIF i = Hx'*ZI*zz
-        let ii = &HxTZI * zz;
+        // Calculate EIF i = Hx'*ZI*z
+        let ii = &HxTZI * z;
         // Calculate EIF I = Hx'*ZI*Hx
         let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 

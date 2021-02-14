@@ -1,5 +1,5 @@
-/// Example of using Bayesian State Estimator to solve a simple problem.
-/// A linear filter with one state and constant noises.
+//! Example of using Bayesian State Estimator to solve a simple problem.
+//! A linear filter with one state and constant noises.
 
 use nalgebra as na;
 use na::{Matrix1, Vector1};

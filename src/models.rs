@@ -132,7 +132,7 @@ where
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
 
     /// The estimator's estimate of the system's KalmanState.
-    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
+    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
 /// A linear predictor.
@@ -189,7 +189,7 @@ pub trait FunctionObserver<N: SimdRealField, D: Dim, ZD: Dim>
 {
     fn observe_innovation(
         &mut self,
-        h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+        h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>,
         noise: &CorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>)
         -> Result<(), &'static str>;

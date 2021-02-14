@@ -75,15 +75,17 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
 impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKallmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, U1, ZD> + Allocator<N, D> + Allocator<N, ZD> {
-    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
+
+    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
         // Create Unscented distribution
         let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
         unscented(&mut self.UU, &self.xX, x_kappa)?;
 
         // Predict points of ZZ using supplied observation model
         let mut ZZ = matrix::as_zeros((s.data.shape().0, self.UU.data.shape().1));
-        for z in 0..ZZ.ncols() {
-            ZZ.column_mut(z).copy_from(&h(&self.UU.column(z).clone_owned()))
+        let xm = &self.xX.x;
+        for i in 0..ZZ.ncols() {
+            ZZ.column_mut(i).copy_from(&h(&self.UU.column(i).clone_owned(), xm))
         }
 
         // Mean and covarnaic of observation distribution
@@ -214,7 +216,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>
         Ok(N::one())
     }
 
-    fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
         return Ok(
             (N::one(), self.xX.clone())
         );
