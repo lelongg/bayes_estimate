@@ -9,6 +9,7 @@
 //!
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
+use approx;
 use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
 use na::base::storage::Storage;
 use na::{allocator::Allocator, DefaultAllocator, U1, U2};
@@ -17,16 +18,14 @@ use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{MatrixMN, RealField};
 use nalgebra as na;
 
-use bayes_filter as bf;
-use bf::estimators::ud::UDState;
-use bf::models::{
+use bayes_estimate::estimators::ud::UDState;
+use bayes_estimate::models::{
     InformationState, KalmanState, LinearObserveModel, LinearPredictModel, KalmanEstimator, LinearObserver,
 };
 
-use approx;
-use bayes_filter::models::{CorrelatedNoise, CoupledNoise, Estimator, LinearPredictor, FunctionPredictor, FunctionObserver, CorrelatedFactorNoise};
-use bayes_filter::estimators::unscented::UnscentedKallmanState;
-use bayes_filter::linalg::cholesky::UDU;
+use bayes_estimate::models::{CorrelatedNoise, CoupledNoise, Estimator, LinearPredictor, FunctionPredictor, FunctionObserver, CorrelatedFactorNoise};
+use bayes_estimate::estimators::unscented::UnscentedKallmanState;
+use bayes_estimate::linalg::cholesky::UDU;
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound

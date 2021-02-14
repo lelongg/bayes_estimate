@@ -1,8 +1,10 @@
+/// Example of using Bayesian State Estimator to solve a simple problem.
+/// A linear filter with one state and constant noises.
+
 use nalgebra as na;
 use na::{Matrix1, Vector1};
 
-use bayes_filter as bf;
-use bf::models::{
+use bayes_estimate::models::{
     KalmanState, LinearObserveModel, LinearPredictModel, LinearObserver, CorrelatedNoise, LinearPredictor
 };
 
@@ -34,7 +36,7 @@ fn main() {
 
     // Make an observation that we should be at 11
     let z = Vector1::new(11.);
-    let s = z - &my_observe_model.Hx * &my_filter.x;
-    my_filter.observe_innovation (&my_observe_model, &my_observe_noise, &s).unwrap();
+    let innovation = z - &my_observe_model.Hx * &my_filter.x;
+    my_filter.observe_innovation (&my_observe_model, &my_observe_noise, &innovation).unwrap();
     println!("Filtered {:.1}{:.2}", my_filter.x, my_filter.X);
 }

@@ -7,10 +7,10 @@
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 //!
-use bayes_filter;
+use bayes_estimate;
 use nalgebra as na;
 
-use bayes_filter::models::{CorrelatedNoise, UncorrelatedNoise, KalmanState, LinearObserver, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise};
+use bayes_estimate::models::{CorrelatedNoise, UncorrelatedNoise, KalmanState, LinearObserver, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, VectorN};
 use std::marker::PhantomData;
 

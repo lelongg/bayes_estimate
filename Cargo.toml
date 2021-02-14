@@ -1,5 +1,5 @@
 [package]
-name = "bayes_filter"
+name = "bayes_estimate"
 version = "0.1.0"
 authors = ["Michael Stevens <mail@michael-stevens.de>"]
 edition = "2018"
@@ -13,5 +13,5 @@ num-traits = "0.2.14"
 [dev-dependencies]
 
 [lib]
-name = "bayes_filter"
+name = "bayes_estimate"
 path = "src/lib.rs"
