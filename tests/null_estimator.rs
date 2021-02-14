@@ -10,7 +10,7 @@
 use bayes_filter;
 use nalgebra as na;
 
-use bayes_filter::models::{AdditiveCorrelatedNoise, AdditiveNoise, KalmanState, LinearObserverCorrelated, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise};
+use bayes_filter::models::{CorrelatedNoise, UncorrelatedNoise, KalmanState, LinearObserver, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, VectorN};
 use std::marker::PhantomData;
 
@@ -42,13 +42,13 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCoupledNoise<N, D, QD>,
+        noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str> {
         Ok(N::one())
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> LinearObserverCorrelated<N, D, ZD>
+impl<N: RealField, D: Dim, ZD: Dim> LinearObserver<N, D, ZD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
@@ -61,7 +61,7 @@ where
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD>,
+        noise: &CorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         Ok(N::one())
@@ -81,7 +81,7 @@ where
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZD>,
+        noise: &UncorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str> {
         Ok(N::one())

@@ -5,18 +5,8 @@ use na::{
 };
 use nalgebra as na;
 use nalgebra::constraint::{DimEq, ShapeConstraint};
-use crate::linalg::cholesky::UDU;
 
 pub type MatrixUDU<N, D> = MatrixN<N, D>;
-
-pub fn prod_spd_udu<N: RealField, D: Dim>(udu: &MatrixUDU<N, D>) -> MatrixN<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D>
-{
-    let mut spd = udu.clone();
-    UDU::UdUrecompose(&mut spd);
-    spd
-}
 
 /// Computes the quadratic form `self = alpha * lhs * mid * lhs.transpose() + beta * self`.
 ///

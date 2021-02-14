@@ -15,7 +15,7 @@ use nalgebra::{Dynamic, MatrixMN};
 use nalgebra::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
-use crate::models::{AdditiveCorrelatedNoise, KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserverCorrelated, Estimator};
+use crate::models::{CorrelatedNoise, KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserver, Estimator};
 use crate::mine::matrix::check_non_negativ;
 use crate::mine::matrix;
 use crate::linalg::cholesky;
@@ -34,9 +34,9 @@ impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, Dynamic> + Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
-    pub fn new(d: D) -> UnscentedKallmanState<N, D> {
+    pub fn new_zero(d: D) -> UnscentedKallmanState<N, D> {
         UnscentedKallmanState {
-            xX: KalmanState::new(d),
+            xX: KalmanState::new_zero(d),
             UU: MatrixMN::zeros_generic(d, Dynamic::new(d.value() * 2 + 1)),
             kappa: N::from_usize(3 - d.value()).unwrap(),
         }
@@ -51,7 +51,7 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
     fn predict(
         &mut self,
         f: fn(&VectorN<N, D>) -> VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D>) -> Result<(), &'static str> {
+        noise: &CorrelatedNoise<N, D>) -> Result<(), &'static str> {
         // Create Unscented distribution
         let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
         let _rcond = unscented(&mut self.UU, &self.xX, x_kappa)?;
@@ -72,10 +72,10 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for UnscentedKallmanState<N, D>
+impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKallmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, U1, ZD> + Allocator<N, D> + Allocator<N, ZD> {
-    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>, noise: &AdditiveCorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
+    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
         // Create Unscented distribution
         let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
         unscented(&mut self.UU, &self.xX, x_kappa)?;
@@ -87,7 +87,7 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserverCorrelated<N, D, ZD> for Uns
         }
 
         // Mean and covarnaic of observation distribution
-        let mut zZ = KalmanState::<N, ZD>::new(ZZ.data.shape().0);
+        let mut zZ = KalmanState::<N, ZD>::new_zero(ZZ.data.shape().0);
         kalman(&mut zZ, &ZZ, self.kappa);
         for i in 0..ZZ.ncols() {
             &ZZ.column_mut(i).sub_assign(&zZ.x);

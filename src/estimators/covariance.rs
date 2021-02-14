@@ -15,14 +15,14 @@ use na::{
 use nalgebra as na;
 
 use crate::linalg::cholesky;
-use crate::mine::matrix::{prod_spd_udu, check_non_negativ};
-use crate::models::{AdditiveCorrelatedNoise, KalmanEstimator, KalmanState, LinearObserverCorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::mine::matrix::{check_non_negativ};
+use crate::models::{CorrelatedNoise, KalmanEstimator, KalmanState, LinearObserver, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new(d: D) -> KalmanState<N, D> {
+    pub fn new_zero(d: D) -> KalmanState<N, D> {
         KalmanState {
             x: VectorN::zeros_generic(d, U1),
             X: MatrixN::zeros_generic(d, d),
@@ -44,11 +44,12 @@ where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
-        self.x.copy_from(&state.x);
-        self.X.copy_from(&state.X);
-        check_non_negativ(cholesky::UDU::UdUrcond(&self.X), "X not PSD")?;
+        self.x = state.x.clone();
+        self.X = state.X.clone();
+        let rcond = cholesky::UDU::UdUrcond(&self.X);
+        check_non_negativ(rcond, "X not PSD")?;
 
-        Ok(N::one())
+        Ok(rcond)
     }
 
     fn state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
@@ -70,7 +71,7 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D>,
+        noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         self.x = x_pred;
         // X = Fx.X.FX' + Q
@@ -81,7 +82,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> LinearObserverCorrelated<N, D, ZD>
+impl<N: RealField, D: Dim, ZD: Dim> LinearObserver<N, D, ZD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
@@ -94,12 +95,12 @@ where
     fn observe_innovation(
         &mut self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD>,
+        noise: &CorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<(), &'static str> {
         let XHt = &self.X * obs.Hx.transpose();
-        // S = Hx.X.Hx' + G.q.G'
-        let S = &obs.Hx * &XHt + prod_spd_udu(&noise.Q);
+        // S = Hx.X.Hx' + Q
+        let S = &obs.Hx * &XHt + &noise.Q;
 
         // Inverse innovation covariance
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();

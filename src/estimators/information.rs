@@ -21,14 +21,13 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};
-use crate::models::{AdditiveCorrelatedNoise, AdditiveNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, AdditiveCoupledNoise, Estimator};
-use crate::linalg::rcond::rcond_symetric;
+use crate::models::{CorrelatedNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise, Estimator};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new(d: D) -> InformationState<N, D> {
+    pub fn new_zero(d: D) -> InformationState<N, D> {
         InformationState {
             i: VectorN::zeros_generic(d, U1),
             I: MatrixN::zeros_generic(d, d),
@@ -85,7 +84,7 @@ where
         &mut self,
         pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
-        noise: &AdditiveCorrelatedNoise<N, D>,
+        noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         // Covariance
         let mut X = self.I.clone();
@@ -117,7 +116,7 @@ where
     pub fn predict_linear_invertible<QD: Dim>(
         &mut self,
         pred_inv: &LinearPredictModel<N, D>,
-        noise: &AdditiveCoupledNoise<N, D, QD>,
+        noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
     where
         DefaultAllocator:
@@ -159,46 +158,13 @@ where
         self.I += &information.I;
     }
 
-    pub fn observe_innovation_co<ZD: Dim>(
+    pub fn observe_innovation<ZD: Dim>(
         &self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveCorrelatedNoise<N, ZD>,
+        noise_inverted: &CorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
         x: &VectorN<N, D>,
-    ) -> Result<(N, InformationState<N, D>), &'static str>
-    where
-        DefaultAllocator: Allocator<N, ZD, ZD>
-            + Allocator<N, ZD, D>
-            + Allocator<N, D, ZD>
-            + Allocator<N, ZD>
-    {
-        let zz = s + &obs.Hx * x; // Strange EIF observation object
-
-        // Observation Information, TODO use inverse directly on q, D factors
-        let udu = UDU::new();
-        let mut ZI = noise.Q.clone();
-        let singular = udu.UdUinverse(&mut ZI);
-        if singular {
-            return Err("Z not PD");
-        }
-        UDU::UdUrecompose_transpose(&mut ZI);
-
-        let HxTZI = obs.Hx.transpose() * ZI;
-        // Calculate EIF i = Hx'*ZI*zz
-        let ii = &HxTZI * zz;
-        // Calculate EIF I = Hx'*ZI*Hx
-        let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
-
-        Ok((rcond_symetric(&noise.Q), InformationState { i: ii, I: II }))
-    }
-
-    pub fn observe_innovation_un<ZD: Dim>(
-        &self,
-        obs: &LinearObserveModel<N, D, ZD>,
-        noise: &AdditiveNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
-        x: &VectorN<N, D>,
-    ) -> Result<(N, InformationState<N, D>), &'static str>
+    ) -> InformationState<N, D>
     where
         DefaultAllocator: Allocator<N, ZD, ZD>
             + Allocator<N, ZD, D>
@@ -208,20 +174,12 @@ where
         let zz = s + &obs.Hx * x; // Strange EIF observation object
 
         // Observation Information
-        let rcond = UDU::UdUrcond_vec(&noise.q);
-        check_positive(rcond, "Zv not PD")?;
-        // HxTZI = Hx'*inverse(Z)
-        let mut HxTZI = obs.Hx.transpose();
-        for w in 0..noise.q.nrows() {
-            let mut HxTZI_w = HxTZI.column_mut(w);
-            HxTZI_w *= N::one() / noise.q[w];
-        }
-
+        let HxTZI = obs.Hx.transpose() * &noise_inverted.Q;
         // Calculate EIF i = Hx'*ZI*zz
         let ii = &HxTZI * zz;
         // Calculate EIF I = Hx'*ZI*Hx
         let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
 
-        Ok((rcond, InformationState { i: ii, I: II }))
+        InformationState { i: ii, I: II }
     }
 }
