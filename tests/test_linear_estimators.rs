@@ -19,8 +19,8 @@ use na::{MatrixMN, RealField};
 use nalgebra as na;
 
 use bayes_estimate::models::{
-    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel, KalmanEstimator, LinearObserver,
-    Estimator, LinearPredictor, FunctionPredictor, FunctionObserver
+    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel, KalmanEstimator, ExtendedLinearObserver,
+    Estimator, ExtendedLinearPredictor, FunctionPredictor, FunctionObserver
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 use bayes_estimate::estimators::unscented::UnscentedKallmanState;
@@ -134,7 +134,7 @@ where
 /// Test covariance estimator operations defined on a KalmanState.
 impl<D: Dim> TestEstimator<D> for KalmanState<f64, D>
 where
-    Self: LinearObserver<f64, D, U1>,
+    Self: ExtendedLinearObserver<f64, D, U1>,
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, U1, D>,
 {
     fn predict_fn(
@@ -144,7 +144,7 @@ where
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        LinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
@@ -157,7 +157,7 @@ where
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        LinearObserver::observe_innovation(self, obs, noise, s)
+        ExtendedLinearObserver::observe_innovation(self, obs, noise, s)
     }
 }
 
@@ -177,7 +177,7 @@ where
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        LinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
@@ -191,7 +191,7 @@ where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
         let x = self.state().unwrap();
-        let noise_inv = CorrelatedNoise{ Q: noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse()};
+        let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
         let info = self.observe_info(obs, &noise_inv, &(s + h(&x, &x)));
         self.add_information(&info);
         Ok(())

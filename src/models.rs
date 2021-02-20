@@ -88,10 +88,10 @@ where
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
-/// A linear predictor.
+/// A extended linear predictor.
 ///
 /// Uses a Linear model with additive noise.
-pub trait LinearPredictor<N: SimdRealField, D: Dim>
+pub trait ExtendedLinearPredictor<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
@@ -117,10 +117,10 @@ pub trait FunctionPredictor<N: SimdRealField, D: Dim>
         noise: &CorrelatedNoise<N, D>) -> Result<(), &'static str>;
 }
 
-/// A linear observer with correlated observation noise.
+/// A extended linear observer with correlated observation noise.
 ///
 /// Uses a Linear observation model with correlated additive observation noise.
-pub trait LinearObserver<N: SimdRealField, D: Dim, ZD: Dim>
+pub trait ExtendedLinearObserver<N: SimdRealField, D: Dim, ZD: Dim>
 where
     DefaultAllocator:
         Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD>

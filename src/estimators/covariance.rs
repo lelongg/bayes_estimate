@@ -16,7 +16,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky;
 use crate::mine::matrix::{check_non_negativ};
-use crate::models::{KalmanEstimator, KalmanState, LinearObserver, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim> LinearPredictor<N, D> for KalmanState<N, D>
+impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> LinearObserver<N, D, ZD>
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>

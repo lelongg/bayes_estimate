@@ -21,7 +21,7 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};
-use crate::models::{InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::models::{InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -72,7 +72,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim> LinearPredictor<N, D> for InformationState<N, D>
+impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
@@ -109,9 +109,9 @@ where
     /// The numerical solution used is particularly flexible. It takes
     /// particular care to avoid invertibility requirements for the noise and noise coupling g,Q
     /// Therefore both zero noises and zeros in the couplings can be used.
-    pub fn predict_linear_invertible<QD: Dim>(
+    pub fn predict_linear<QD: Dim>(
         &mut self,
-        pred_inv: &LinearPredictModel<N, D>,
+        pred_inv: MatrixN<N, D>, // Inverse of linear prediction model Fx
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
     where
@@ -121,7 +121,7 @@ where
         let I_shape = self.I.data.shape();
 
         // A = invFx'*Y*invFx ,Inverse Predict covariance
-        let A = (&self.I * &pred_inv.Fx).transpose() * &pred_inv.Fx;
+        let A = (&self.I * &pred_inv).transpose() * &pred_inv;
         // B = G'*A*G+invQ , A in coupled additive noise space
         let mut B = (&A * &noise.G).transpose() * &noise.G;
         for i in 0..noise.q.nrows() {
@@ -143,7 +143,7 @@ where
         // Information
         self.I = &ig * &A;
         // Information state
-        let y = pred_inv.Fx.transpose() * &self.i;
+        let y = pred_inv.transpose() * &self.i;
         self.i = &ig * &y;
 
         Ok(rcond)
@@ -157,7 +157,7 @@ where
     pub fn observe_info<ZD: Dim>(
         &self,
         obs: &LinearObserveModel<N, D, ZD>,
-        noise_inverted: &CorrelatedNoise<N, ZD>,
+        noise_inv: &MatrixN<N, ZD>,  // Inverse of correlated noise model
         z: &VectorN<N, ZD>
     ) -> InformationState<N, D>
     where
@@ -167,7 +167,7 @@ where
             + Allocator<N, ZD>
     {
         // Observation Information
-        let HxTZI = obs.Hx.transpose() * &noise_inverted.Q;
+        let HxTZI = obs.Hx.transpose() * noise_inv;
         // Calculate EIF i = Hx'*ZI*z
         let ii = &HxTZI * z;
         // Calculate EIF I = Hx'*ZI*Hx

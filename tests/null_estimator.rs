@@ -10,7 +10,7 @@
 use bayes_estimate;
 use nalgebra as na;
 
-use bayes_estimate::models::{CorrelatedNoise, UncorrelatedNoise, KalmanState, LinearObserver, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise};
+use bayes_estimate::models::{CorrelatedNoise, UncorrelatedNoise, KalmanState, ExtendedLinearObserver, LinearObserverUncorrelated, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, CoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, VectorN};
 use std::marker::PhantomData;
 
@@ -29,7 +29,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, QD: Dim> LinearPredictor<N, D, QD> for NullState<N, D>
+impl<N: RealField, D: Dim, QD: Dim> ExtendedLinearPredictor<N, D, QD> for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
         + Allocator<N, QD, QD>
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> LinearObserver<N, D, ZD>
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD>
     for NullState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>

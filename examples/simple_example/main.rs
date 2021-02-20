@@ -5,7 +5,7 @@ use nalgebra as na;
 use na::{Matrix1, Vector1};
 
 use bayes_estimate::models::{
-    KalmanState, LinearObserveModel, LinearPredictModel, LinearObserver, CorrelatedNoise, LinearPredictor
+    KalmanState, LinearObserveModel, LinearPredictModel, ExtendedLinearObserver, CorrelatedNoise, ExtendedLinearPredictor
 };
 
 fn main() {
