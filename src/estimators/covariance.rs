@@ -16,7 +16,8 @@ use nalgebra as na;
 
 use crate::linalg::cholesky;
 use crate::mine::matrix::{check_non_negativ};
-use crate::models::{CorrelatedNoise, KalmanEstimator, KalmanState, LinearObserver, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::models::{KalmanEstimator, KalmanState, LinearObserver, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::noise::{CorrelatedNoise};
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
 where

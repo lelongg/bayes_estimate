@@ -15,9 +15,9 @@ use nalgebra::{Dynamic, MatrixMN};
 use nalgebra::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
-use crate::models::{CorrelatedNoise, KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserver, Estimator};
-use crate::mine::matrix::check_non_negativ;
-use crate::mine::matrix;
+use crate::models::{KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserver, Estimator};
+use crate::noise::{CorrelatedNoise};
+use crate::mine::matrix::{check_non_negativ, as_zeros};
 use crate::linalg::cholesky;
 
 pub struct UnscentedKallmanState<N: RealField, D: Dim>
@@ -82,7 +82,7 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKall
         unscented(&mut self.UU, &self.xX, x_kappa)?;
 
         // Predict points of ZZ using supplied observation model
-        let mut ZZ = matrix::as_zeros((s.data.shape().0, self.UU.data.shape().1));
+        let mut ZZ = as_zeros((s.data.shape().0, self.UU.data.shape().1));
         let xm = &self.xX.x;
         for i in 0..ZZ.ncols() {
             ZZ.column_mut(i).copy_from(&h(&self.UU.column(i).clone_owned(), xm))

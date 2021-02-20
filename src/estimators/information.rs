@@ -21,7 +21,8 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};
-use crate::models::{CorrelatedNoise, InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, CoupledNoise, Estimator};
+use crate::models::{InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, LinearPredictor, Estimator};
+use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
 where

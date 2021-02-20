@@ -20,7 +20,8 @@ use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
-use crate::models::{UncorrelatedNoise, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, CoupledNoise, Estimator, CorrelatedFactorNoise};
+use crate::models::{KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, Estimator};
+use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 
 /// UD State representation.
 ///
@@ -29,8 +30,8 @@ use crate::models::{UncorrelatedNoise, KalmanEstimator, KalmanState, LinearObser
 /// The state covariance X is factorised with a modified Cholesky factorisation so U.d.U' == X, where U is upper triangular matrix (0 diagonal) and
 /// d is a diagonal vector. U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
 pub struct UDState<N: RealField, D: Dim, XUD: Dim>
-where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
 {
     /// State vector
     pub x: VectorN<N, D>,

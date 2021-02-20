@@ -18,12 +18,11 @@ use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{MatrixMN, RealField};
 use nalgebra as na;
 
-use bayes_estimate::estimators::ud::UDState;
 use bayes_estimate::models::{
-    InformationState, KalmanState, LinearObserveModel, LinearPredictModel, KalmanEstimator, LinearObserver,
+    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel, KalmanEstimator, LinearObserver,
+    Estimator, LinearPredictor, FunctionPredictor, FunctionObserver
 };
-
-use bayes_estimate::models::{CorrelatedNoise, CoupledNoise, Estimator, LinearPredictor, FunctionPredictor, FunctionObserver, CorrelatedFactorNoise};
+use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 use bayes_estimate::estimators::unscented::UnscentedKallmanState;
 use bayes_estimate::linalg::cholesky::UDU;
 
