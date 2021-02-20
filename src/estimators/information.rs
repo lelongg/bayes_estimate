@@ -34,11 +34,6 @@ where
             I: MatrixN::zeros_generic(d, d),
         }
     }
-
-    pub fn init_information(&mut self, information: &InformationState<N, D>) {
-        self.i = information.i.clone();
-        self.I = information.I.clone();
-    }
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for InformationState<N, D>
