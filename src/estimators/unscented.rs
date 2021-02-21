@@ -11,7 +11,7 @@ use na::{
     allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN,
 };
 use nalgebra as na;
-use nalgebra::{Dynamic, MatrixMN};
+use nalgebra::{MatrixMN, DimSum, DimAdd};
 use nalgebra::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
@@ -20,24 +20,27 @@ use crate::noise::{CorrelatedNoise};
 use crate::mine::matrix::{check_non_negativ, as_zeros};
 use crate::linalg::cholesky;
 
-pub struct UnscentedKallmanState<N: RealField, D: Dim>
+
+pub struct UnscentedKallmanState<N:RealField, D: Dim>
     where
-        DefaultAllocator: Allocator<N, D, Dynamic> + Allocator<N, D, D> + Allocator<N, D>
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, D, DimSum<D, DimSum<D, U1>>>
 {
     pub xX: KalmanState<N, D>,
     /// Unscented state
-    pub UU: MatrixMN<N, D, Dynamic>,
+    pub UU: MatrixMN<N, D, DimSum<D, DimSum<D, U1>>>,
     pub kappa: N,
 }
 
 impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, Dynamic> + Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, D, DimSum<D, DimSum<D, U1>>>
 {
     pub fn new_zero(d: D) -> UnscentedKallmanState<N, D> {
         UnscentedKallmanState {
             xX: KalmanState::new_zero(d),
-            UU: MatrixMN::zeros_generic(d, Dynamic::new(d.value() * 2 + 1)),
+            UU: MatrixMN::zeros_generic(d, d.add(d.add(U1))),
             kappa: N::from_usize(3 - d.value()).unwrap(),
         }
     }
@@ -45,7 +48,9 @@ impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
 
 impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, Dynamic> + Allocator<N, U1, D> + Allocator<N, D>,
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, D, DimSum<D, DimSum<D, U1>>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
     // State prediction with a linear prediction model and additive noise.
     fn predict(
@@ -72,9 +77,41 @@ impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, 
     }
 }
 
+pub fn unscented<N: RealField, D: Dim>(UU: &mut MatrixMN<N, D, DimSum<D, DimSum<D, U1>>>, xX: &KalmanState<N, D>, scale: N) -> Result<N, &'static str>
+    where
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, DimSum<D, DimSum<D, U1>>> + Allocator<N, D, D> + Allocator<N, D>
+{
+    let xsize = UU.nrows();
+    let udu = UDU::new();
+
+    let mut sigma = xX.X.clone();
+    let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
+
+    check_non_negativ(rcond, "Unscented X not PSD")?;
+    sigma *= scale.simd_sqrt();
+
+    // Generate XX with the same sample Mean and Covariance
+    UU.column_mut(0).copy_from(&xX.x);
+
+    for c in 0..xX.x.nrows() {
+        let sigmaCol = sigma.column(c);
+        let xp: VectorN<N, D> = &xX.x + &sigmaCol;
+        UU.column_mut(c + 1).copy_from(&xp);
+        let xm: VectorN<N, D> = &xX.x - &sigmaCol;
+        UU.column_mut(c + 1 + xsize).copy_from(&xm);
+    }
+
+    Ok(rcond)
+}
+
 impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic> + Allocator<N, U1, ZD> + Allocator<N, D> + Allocator<N, ZD> {
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        ZD: DimAdd<U1>, ZD: DimAdd<DimSum<ZD, U1>>,
+        DefaultAllocator: Allocator<N, D, DimSum<D, DimSum<D, U1>>> + Allocator<N, D, D> + Allocator<N, D>,
+        DefaultAllocator: Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, ZD, DimSum<D, DimSum<D, U1>>>
+        + Allocator<N, U1, ZD> + Allocator<N, ZD> {
 
     fn observe_innovation(&mut self, h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
         // Create Unscented distribution
@@ -133,36 +170,9 @@ impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKall
     }
 }
 
-pub fn unscented<N: RealField, D: Dim>(UU: &mut MatrixMN<N, D, Dynamic>, xX: &KalmanState<N, D>, scale: N) -> Result<N, &'static str>
+pub fn kalman<N: RealField, D: Dim, UD: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN<N, D, UD>, scale: N)
     where
-        DefaultAllocator: Allocator<N, D, Dynamic> + Allocator<N, D, D> + Allocator<N, D>
-{
-    let xsize = UU.nrows();
-    let udu = UDU::new();
-
-    let mut sigma = xX.X.clone();
-    let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
-
-    check_non_negativ(rcond, "Unscented X not PSD")?;
-    sigma *= scale.simd_sqrt();
-
-    // Generate XX with the same sample Mean and Covariance
-    UU.column_mut(0).copy_from(&xX.x);
-
-    for c in 0..xX.x.nrows() {
-        let sigmaCol = sigma.column(c);
-        let xp: VectorN<N, D> = &xX.x + &sigmaCol;
-        UU.column_mut(c + 1).copy_from(&xp);
-        let xm: VectorN<N, D> = &xX.x - &sigmaCol;
-        UU.column_mut(c + 1 + xsize).copy_from(&xm);
-    }
-
-    Ok(rcond)
-}
-
-pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN<N, D, Dynamic>, scale: N)
-    where
-        DefaultAllocator: Allocator<N, D, Dynamic> + Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>
+        DefaultAllocator: Allocator<N, D, UD> + Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>
 {
     let two = N::from_u32(2).unwrap();
     let half = N::one() / two;
@@ -197,7 +207,9 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &MatrixMN
 
 impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, Dynamic> + Allocator<N, U1, D> + Allocator<N, D>,
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, D, DimSum<D, DimSum<D, U1>>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         return Ok(self.xX.x.clone());
@@ -206,7 +218,9 @@ impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, Dynamic> + Allocator<N, U1, D> + Allocator<N, D>,
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, D, DimSum<D, DimSum<D, U1>>>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         self.xX.x.copy_from(&state.x);

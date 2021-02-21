@@ -57,6 +57,11 @@ fn test_ud_u2() {
 }
 
 #[test]
+fn test_unscented_u2() {
+    test_estimator(&mut UnscentedKallmanState::new_zero(U2));
+}
+
+#[test]
 fn test_covariance_dynamic() {
     test_estimator(&mut KalmanState::new_zero(Dynamic::new(2)));
 }
@@ -236,11 +241,15 @@ where
 }
 
 /// Test UD estimator operations defined on a UDState.
-impl<D: DimAdd<U1>> TestEstimator<D> for UnscentedKallmanState<f64, D>
+impl<D: Dim> TestEstimator<D> for UnscentedKallmanState<f64, D>
     where
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f64, D, Dynamic>
-        + Allocator<usize, D, Dynamic> + Allocator<usize, D, DimSum<D, U1>>,
-{
+        D: DimAdd<U1>, D: DimAdd<DimSum<D, U1>>,
+        U1: DimAdd<U1>, U1: DimAdd<DimSum<U1, U1>>,
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, D, DimSum<D, DimSum<D, U1>>>,
+        DefaultAllocator: Allocator<f64, U1, D> + Allocator<usize, D, DimSum<D, DimSum<D, U1>>> + Allocator<usize, D, DimSum<D, U1>>,
+        DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
+        DefaultAllocator: Allocator<f64, D, U1> + Allocator<f64, U1, DimSum<D, DimSum<D, U1>>> {
+
     fn trace_state(&self) {
         println!("{}", self.UU);
     }
