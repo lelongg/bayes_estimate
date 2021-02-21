@@ -9,7 +9,7 @@ use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
 use na::{SimdRealField};
 
-use crate::noise::{CorrelatedNoise};
+pub use crate::noise::{CorrelatedNoise};
 
 pub use crate::estimators::ud::UDState;
 
