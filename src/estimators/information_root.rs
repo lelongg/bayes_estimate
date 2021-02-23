@@ -16,8 +16,8 @@
 //! [`InformationState`]: ../models/struct.InformationState.html
 
 use nalgebra as na;
-use na::{allocator::Allocator, DefaultAllocator, Dim, DMatrix, MatrixMN, MatrixN, RealField, VectorN, U1};
-use na::{SimdRealField, QR, DimName, Dynamic};
+use na::{allocator::Allocator, DefaultAllocator, DMatrix, MatrixMN, MatrixN, RealField, VectorN, QR};
+use na::{SimdRealField, Dim, DimName, Dynamic, U1};
 
 use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanState, InformationState, KalmanEstimator, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};

@@ -16,8 +16,7 @@
 //! [`InformationState`]: ../models/struct.InformationState.html
 
 use nalgebra as na;
-use na::base::storage::Storage;
-use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, RealField, VectorN, U1};
+use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, MatrixMN, MatrixN, RealField, VectorN};
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};

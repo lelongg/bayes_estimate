@@ -6,10 +6,7 @@
 use simba::simd::SimdComplexField;
 
 use nalgebra as na;
-use na::{
-    allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN,
-};
-use nalgebra::storage::Storage;
+use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN, storage::Storage};
 
 use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserver, Estimator};

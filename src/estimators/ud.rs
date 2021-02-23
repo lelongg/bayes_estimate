@@ -11,11 +11,9 @@
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
-use na::base::storage::Storage;
-use na::{allocator::Allocator, DefaultAllocator};
-use na::{DMatrix, Dynamic, MatrixMN, MatrixN, VectorN, U1};
-use na::{Dim, RealField};
 use nalgebra as na;
+use na::{allocator::Allocator, DefaultAllocator, storage::Storage};
+use na::{Dim, RealField, Dynamic, U1, DMatrix, MatrixMN, MatrixN, VectorN};
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix;
