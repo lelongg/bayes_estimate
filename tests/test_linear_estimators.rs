@@ -243,15 +243,15 @@ where
 /// Test UD estimator operations defined on a UDState.
 impl<D: Dim> TestEstimator<D> for UnscentedKallmanState<f64, D>
     where
-        D: DimAdd<U1>,
-        U1: DimAdd<U1>,
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
-        DefaultAllocator: Allocator<f64, U1, D> + Allocator<usize, D, DimSum<D, U1>>,
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, U1, D>,
+        DefaultAllocator: Allocator<f64, D, Dynamic>,
+        DefaultAllocator: Allocator<usize, D, Dynamic>,
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
         DefaultAllocator: Allocator<f64, D, U1>  {
 
     fn trace_state(&self) {
-        println!("{:?}", self.UU);
+        let columns: MatrixMN<f64, D, Dynamic> = MatrixMN::from_columns(self.UU.as_slice());
+        println!("{:}", columns);
     }
 
     fn predict_fn(
@@ -340,7 +340,6 @@ where
     };
 
     check(est.init(&init_state), "init").unwrap();
-    est.trace_state();
 
     let xx = KalmanEstimator::kalman_state(est).unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
@@ -358,6 +357,7 @@ where
 
         let oo = KalmanEstimator::kalman_state(est).unwrap().1;
         println!("obs={:.6}{:.6}", oo.x, oo.X);
+        est.trace_state();
     }
 
     let obs_x = Estimator::state(est).unwrap();

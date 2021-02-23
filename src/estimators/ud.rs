@@ -50,7 +50,7 @@ where
     ///
     /// d is the size of states vector and rows in UD.
     ///
-    /// XUD is the number of columns in UD. This will be large then d to accommodate the matrix
+    /// xud is the number of columns in UD. This will be large then d to accommodate the matrix
     /// dimensions of the prediction model. The extra columns are used for the prediction computation.
     pub fn new_zero(d: D, xud: XUD) -> Self {
         assert!(xud.value() >= d.value(), "xud must be >= d");

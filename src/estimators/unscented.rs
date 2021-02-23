@@ -200,7 +200,7 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<Vect
 
 impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         return Ok(self.xX.x.clone());
@@ -209,7 +209,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         self.xX.x.copy_from(&state.x);
