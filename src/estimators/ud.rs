@@ -4,8 +4,7 @@
 //!
 //! A discrete Bayesian filter that uses a 'square root' factorisation of the Kalman state representation [`KalmanState`] of the system for estimation.
 //!
-//! The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and
-//! d is a diagonal vector.
+//! The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and d is a diagonal vector.
 //! Numerically the this 'square root' factorisation is advantageous as condition of when inverting is improved by the square root.
 //!
 //! The linear representation can also be used for non-linear system by using linearised forms of the system model.

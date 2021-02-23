@@ -9,10 +9,10 @@
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
+use nalgebra as na;
 use na::{
     allocator::Allocator, DefaultAllocator, Dim, MatrixN, RealField, VectorN, U1,
 };
-use nalgebra as na;
 
 use crate::linalg::cholesky;
 use crate::mine::matrix::{check_non_negativ};
@@ -56,10 +56,7 @@ where
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
         Ok((
             N::one(),
-            KalmanState {
-                x: self.x.clone(),
-                X: self.X.clone(),
-            },
+            self.clone()
         ))
     }
 }

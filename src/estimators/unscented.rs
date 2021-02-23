@@ -5,10 +5,10 @@
 
 use simba::simd::SimdComplexField;
 
+use nalgebra as na;
 use na::{
     allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN,
 };
-use nalgebra as na;
 use nalgebra::storage::Storage;
 
 use crate::linalg::cholesky::UDU;

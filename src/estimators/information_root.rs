@@ -15,14 +15,14 @@
 //!
 //! [`InformationState`]: ../models/struct.InformationState.html
 
-use na::{allocator::Allocator, DefaultAllocator, Dim, DMatrix, MatrixMN, MatrixN, RealField, VectorN, U1};
 use nalgebra as na;
+use na::{allocator::Allocator, DefaultAllocator, Dim, DMatrix, MatrixMN, MatrixN, RealField, VectorN, U1};
+use na::{SimdRealField, QR, DimName, Dynamic};
 
 use crate::linalg::cholesky::UDU;
-use crate::mine::matrix::{check_positive};
 use crate::models::{KalmanState, InformationState, KalmanEstimator, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
-use nalgebra::{SimdRealField, QR, DimName, Dynamic};
+use crate::linalg::cholesky;
 
 /// Information State.
 ///
@@ -55,12 +55,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for InformationRootState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        let mut RI = self.R.clone();    // Invert Cholesky factor
-        let singular = UDU::new().UTinverse(&mut RI);
-        if singular {
-            return Result::Err("R singular");
-        }
-
+        let RI = self.R.clone().cholesky().ok_or("R not PD")?.inverse();
         let x = RI * &self.r;
 
         Result::Ok(x)
@@ -73,17 +68,12 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         // Information Root
-        let udu = UDU::new();
-        self.R.copy_from(&state.X);
-        let rcond = udu.UCfactor_n(&mut self.R, state.X.nrows());
-        check_positive(rcond, "X not PD")?;
-        let singular = udu.UTinverse(&mut self.R);
-        assert!(!singular, "singular R");   // unexpected check_positive should prevent singular
+        self.R = state.X.clone().cholesky().ok_or("X not PD")?.inverse();
 
         // Information Root state r=R*x
         self.r = &self.R * &state.x;
 
-        Result::Ok(rcond)
+        Result::Ok(cholesky::UDU::UdUrcond(&state.X))
     }
 
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
@@ -102,8 +92,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
 
 impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, D>
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     fn predict(
         &mut self,

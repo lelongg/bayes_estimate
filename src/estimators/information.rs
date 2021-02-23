@@ -15,9 +15,9 @@
 //!
 //! [`InformationState`]: ../models/struct.InformationState.html
 
+use nalgebra as na;
 use na::base::storage::Storage;
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, RealField, VectorN, U1};
-use nalgebra as na;
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};
@@ -138,7 +138,7 @@ where
 
         // G*invB*G' ,in state space
         self.I.quadform_tr(N::one(), &noise.G, &B, N::zero());
-        // I - A* G*invB*G' ,information gain
+        // I - A* G*invB*G', information gain
         let ig = MatrixMN::identity_generic(I_shape.0, I_shape.1) - &A * &self.I;
         // Information
         self.I = &ig * &A;
@@ -161,10 +161,7 @@ where
         z: &VectorN<N, ZD>
     ) -> InformationState<N, D>
     where
-        DefaultAllocator: Allocator<N, ZD, ZD>
-            + Allocator<N, ZD, D>
-            + Allocator<N, D, ZD>
-            + Allocator<N, ZD>
+        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
     {
         // Observation Information
         let HxTZI = obs.Hx.transpose() * noise_inv;
