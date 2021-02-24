@@ -9,6 +9,7 @@
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, DMatrix, MatrixMN, MatrixN, RealField, VectorN, QR};
 use na::{SimdRealField, Dim, DimName, Dynamic, U1};
+use na::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanState, InformationState, KalmanEstimator, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
@@ -19,7 +20,8 @@ use crate::mine::matrix::check_positive;
 /// Information State.
 ///
 /// Linear representation as a information root state vector and the information root (upper triangular) matrix.
-/// For a given [KalmanState] the information root state R.R' == inverse(X), r == R.x
+/// For a given [KalmanState] the information root state inverse(R).inverse(R)' == X, r == R.x
+/// For a given [InformationState] the information root state R'.R == I, r == invserse(R).i
 #[derive(PartialEq, Clone)]
 pub struct InformationRootState<N: SimdRealField, D: Dim>
     where
@@ -35,26 +37,31 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new(d: D) -> InformationRootState<N, D> {
+    pub fn new_zero(d: D) -> InformationRootState<N, D> {
         InformationRootState {
             r: VectorN::zeros_generic(d, U1),
             R: MatrixN::zeros_generic(d, d),
         }
     }
 
-    // pub fn init(&mut self, state: &InformationState<N, D>) -> Result<N, &'static str> {
-    //     // Information Root
-    //     self.R = state.I.clone().cholesky().ok_or("X not PD")?.l().transpose();
-    //
-    //     // Information Root state r=R*x
-    //     self.r = &self.R.transpose() * &state.i;
-    //
-    //     Result::Ok(cholesky::UDU::UdUrcond(&state.I))
-    // }
-    //
+    pub fn init_information(&mut self, state: &InformationState<N, D>) -> Result<N, &'static str> {
+        // Information Root, R'.R = I
+        self.R = state.I.clone().cholesky().ok_or("I not PD")?.l().transpose();
+
+        // Information Root state, r=inv(R)'.i
+        let shape = self.R.data.shape();
+        let mut RI = MatrixN::identity_generic(shape.0, shape.1);
+        self.R.solve_upper_triangular_mut(&mut RI);
+        self.r = RI.transpose() * &state.i;
+
+        Result::Ok(cholesky::UDU::UdUrcond(&state.I))
+    }
+
     pub fn information_state(&self) -> Result<(N, InformationState<N, D>), &'static str> {
-        let I = &self.R.transpose() * &self.R ; // I = R'R
+        // Information, I = R.R'
+        let I = &self.R.transpose() * &self.R ;
         let x = self.state()?;
+        // Information state, i = I.x
         let i = &I * x;
 
         Result::Ok((N::one(), InformationState { i, I }))
@@ -75,7 +82,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
-        // Information Root
+        // Information Root, inv(R).inv(R)' = X
         let udu = UDU::new();
         self.R.copy_from(&state.X);
         let rcond = udu.UCfactor_n(&mut self.R, state.X.nrows());
@@ -83,20 +90,20 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
         let singular = udu.UTinverse(&mut self.R);
         assert!(!singular, "singular R");   // unexpected check_positive should prevent singular
 
-        // Information Root state r=R*x
+        // Information Root state, r=R*x
         self.r = &self.R * &state.x;
 
         Result::Ok(cholesky::UDU::UdUrcond(&state.X))
     }
 
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        let mut RI = self.R.clone();    // Invert Cholesky factor
-        let singular = UDU::new().UTinverse(&mut RI);
-        if singular {
-            return Result::Err("R singular");
-        }
+        let shape = self.R.data.shape();
+        let mut RI = MatrixN::identity_generic(shape.0, shape.1);
+        self.R.solve_upper_triangular_mut(&mut RI);
 
-        let X = &RI * &RI.transpose();        // X = RI*RI'
+        // Covariance X = inv(R).inv(R)'
+        let X = &RI * &RI.transpose();
+        // State, x= inv(R).r
         let x = RI * &self.r;
 
         Result::Ok((N::one(), KalmanState { x, X }))

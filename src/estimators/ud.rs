@@ -41,8 +41,24 @@ where
 {
     /// Create a UDState for given state dimensions.
     ///
-    /// d is the size of states vector and rows in UD.
+    /// D is the size of states vector and rows in UD.
     ///
+    /// XUD is the number of columns in UD. This will be large then d to accommodate the matrix
+    /// dimensions of the prediction model. The extra columns are used for the prediction computation.
+    pub fn new(UD: MatrixMN<N, D, XUD>, x: VectorN<N, D>) -> Self {
+        assert!(UD.ncols() >= UD.nrows(), "UD cols must be >= UD rows");
+        assert!(x.nrows() == UD.nrows(), "x rows must be == UD rows");
+
+        UDState {
+            UD,
+            x,
+            udu: UDU::new(),
+        }
+    }
+
+    /// Create a UDState for given state dimensions.
+    ///
+    /// d is the size of states vector and rows in UD.
     /// xud is the number of columns in UD. This will be large then d to accommodate the matrix
     /// dimensions of the prediction model. The extra columns are used for the prediction computation.
     pub fn new_zero(d: D, xud: XUD) -> Self {
