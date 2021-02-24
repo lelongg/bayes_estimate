@@ -2,52 +2,7 @@
 //!
 //! Required for all linear algebra in models and filters.
 
-use nalgebra::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, RealField, VectorN};
-
-/// Estimate the reciprocal condition number of a Diagonal Matrix for inversion.
-///
-/// D represents a diagonal matrix, the parameter is actually passed as a vector.
-///
-/// The Condition Number is defined from a matrix norm.
-/// Choose max element of D as the norm of the original matrix. Assume this norm for inverse matrix is min element D.
-/// Therefore rcond = min/max. By definition rcond <= 1 as min<=max. Note:
-/// Defined to be 0 for semi-definite and 0 for an empty matrix
-/// Defined to be 0 for max and min infinite
-/// Defined to be <0 for negative matrix (D element a value  < 0)
-/// Defined to be <0 with any NaN element
-///
-/// A negative matrix may be due to errors in the original matrix resulting in
-/// a factorisation producing special values in D (e.g. -infinity,NaN etc)
-pub fn rcond_vec<N: RealField, R: Dim>(dv: &VectorN<N, R>) -> N
-where
-    DefaultAllocator: Allocator<N, R>,
-{
-    // Special case an empty matrix
-    let n = dv.nrows();
-    if n == 0 {
-        N::zero()
-    } else {
-        let mut mind = dv[0];
-        let mut maxd = mind;
-
-        for i in 0..n {
-            let d = dv[i];
-            if d != d {
-                // NaN
-                mind = N::one().neg();
-                break;
-            }
-            if d < mind {
-                mind = d;
-            }
-            if d > maxd {
-                maxd = d;
-            }
-        }
-
-        rcond_min_max(mind, maxd)
-    }
-}
+use nalgebra::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, RealField};
 
 pub fn rcond_symetric<N: RealField, R: Dim, C: Dim>(sm: &MatrixMN<N, R, C>) -> N
 where

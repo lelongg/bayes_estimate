@@ -35,5 +35,7 @@
 pub mod models;
 pub mod noise;
 pub mod estimators;
-pub mod linalg;
-mod mine;
+mod linalg;
+mod matrix;
+
+pub use linalg::cholesky;

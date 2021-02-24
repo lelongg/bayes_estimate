@@ -11,7 +11,7 @@ use na::{allocator::Allocator, DefaultAllocator, storage::Storage};
 use na::{Dim, RealField, Dynamic, U1, DMatrix, MatrixMN, MatrixN, VectorN};
 
 use crate::linalg::cholesky::UDU;
-use crate::mine::matrix;
+use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
 use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 

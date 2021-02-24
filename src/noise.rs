@@ -9,9 +9,9 @@ use na::SimdRealField;
 use na::storage::Storage;
 use nalgebra as na;
 
-use crate::mine::matrix;
+use crate::matrix;
 use nalgebra::RealField;
-use crate::mine::matrix::MatrixUDU;
+use crate::matrix::MatrixUDU;
 
 /// Additive noise.
 ///

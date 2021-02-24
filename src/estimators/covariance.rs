@@ -12,7 +12,7 @@ use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
 
 use crate::linalg::cholesky;
-use crate::mine::matrix::{check_non_negativ};
+use crate::matrix::{check_non_negativ};
 use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise};
 use nalgebra::MatrixMN;

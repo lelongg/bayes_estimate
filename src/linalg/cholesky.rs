@@ -13,9 +13,9 @@
 //! LD format of LdL' factor
 //! strict_lower_triangle(LD) = strict_lower_triangle(L), diagonal(LD) = d, strict_upper_triangle(LD) ignored or zeroed
 
-use na::{allocator::Allocator, DefaultAllocator};
-use na::{Dim, MatrixMN, RealField, VectorN};
 use nalgebra as na;
+use na::{allocator::Allocator, DefaultAllocator};
+use na::{Dim, MatrixMN, RealField};
 
 use super::rcond;
 
@@ -32,16 +32,6 @@ impl<N: RealField> UDU<N> {
             one: N::one(),
             minus_one: N::one().neg(),
         }
-    }
-
-    /// Estimate the reciprocal condition number for inversion of the original PSD matrix for which d is the factor UdU' or LdL'.
-    ///
-    /// The original matrix must therefore be diagonal.
-    pub fn UdUrcond_vec<R: Dim>(d: &VectorN<N, R>) -> N
-    where
-        DefaultAllocator: Allocator<N, R>,
-    {
-        rcond::rcond_vec(d)
     }
 
     /// Estimate the reciprocal condition number for inversion of the original PSD * matrix for which UD is the factor UdU' or LdL'.
@@ -70,22 +60,6 @@ impl<N: RealField> UDU<N> {
         } else {
             rcond * rcond
         }
-    }
-
-    /// Compute the determinant of the original PSD matrix for which UD is the factor UdU' or LdL'.
-    ///
-    /// Result comes directly from determinant of diagonal in triangular matrices. Defined to be 1 for 0 size UD
-    pub fn UdUdet<R: Dim, C: Dim>(&self, UD: &MatrixMN<N, R, C>) -> N
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        let n = UD.nrows();
-        assert_eq!(n, UD.ncols());
-        let mut det = self.one;
-        for i in 0..n {
-            det *= UD[(i, i)];
-        }
-        det
     }
 
     /// In place Modified upper triangular Cholesky factor of a Positive definite or semi-definite matrix M.
@@ -183,56 +157,6 @@ impl<N: RealField> UDU<N> {
                 // Possibly semi-definite, check not negative, whole row must be identically zero
                 for k in j + 1..n {
                     if M[(j, k)] != self.zero {
-                        return self.minus_one;
-                    }
-                }
-            } else {
-                // Negative
-                return self.minus_one;
-            }
-        }
-
-        // Estimate the reciprocal condition number
-        UDU::UdUrcond(M)
-    }
-
-    /// In place modified lower triangular Cholesky factor of a Positive definite or semi-definite matrix M.
-    ///
-    /// Reference: A+G p.218 Lower Cholesky algorithm modified for LdL'
-    ///
-    /// Input: M, n=last std::size_t to be included in factorisation
-    ///
-    /// Output: M as LdL' factor
-    ///
-    /// strict_lower_triangle(M) = strict_lower_triangle(L), diagonal(M) = d
-    ///
-    /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
-    ///
-    /// ISSUE: This could change to be equivalent to UdUfactor_varient2
-    pub fn LdLfactor_n<R: Dim, C: Dim>(&self, M: &mut MatrixMN<N, R, C>, n: usize) -> N
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        for j in 0..n {
-            let mut d = M[(j, j)];
-
-            // Diagonal element
-            if d > self.zero {
-                // Positive definite
-                d = self.one / d;
-
-                for i in j + 1..n {
-                    let e = M[(i, j)];
-                    M[(i, j)] = d * e;
-                    for k in i..n {
-                        let t = e * M[(k, j)];
-                        M[(k, i)] -= t;
-                    }
-                }
-            } else if d == self.zero {
-                // Possibly semi-definite, check not negative
-                for i in j + 1..n {
-                    if M[(i, j)] != self.zero {
                         return self.minus_one;
                     }
                 }
@@ -479,74 +403,6 @@ impl<N: RealField> UDU<N> {
         }
     }
 
-    /// Zero strict upper triangle of Matrix.
-    pub fn Uzero<R: Dim, C: Dim>(&self, M: &mut MatrixMN<N, R, C>)
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        let n = M.nrows();
-        assert_eq!(n, M.ncols());
-        for i in 0..n {
-            for j in i + 1..n {
-                M[(i, j)] = self.zero;
-            }
-        }
-    }
-
-    /// Convert a normal upper triangular Cholesky factor into a Modified Cholesky factor.
-    ///
-    /// Lower triangle of UD is ignored and unmodified, * Ignores Columns with zero diagonal element.
-    /// Correct for zero columns i.e. UD is Cholesky factor of a PSD Matrix.
-    ///
-    /// Note: There is no inverse to this function toCholesky as square losses the sign
-    ///
-    /// Input: U Normal Cholesky factor (Upper triangular)
-    ///
-    /// Output: U Modified Cholesky factor (UD format)
-    pub fn UdUfromUCholesky<R: Dim, C: Dim>(&self, U: &mut MatrixMN<N, R, C>)
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        let n = U.nrows();
-        assert_eq!(n, U.ncols());
-        for j in 0..n {
-            let sd = U[(j, j)];
-            U[(j, j)] = sd * sd;
-            // Devide columns by square of non zero diagonal
-            if sd != self.zero {
-                for i in 0..j {
-                    U[(i, j)] /= sd;
-                }
-            }
-        }
-    }
-
-    /// Extract the separate U and d parts of the UD factorisation.
-    ///
-    /// Output: U and d parts of UD
-    pub fn UdUseperate<R: Dim, C: Dim>(
-        &self,
-        U: &mut MatrixMN<N, R, C>,
-        d: &mut VectorN<N, R>,
-        UD: &MatrixMN<N, R, C>,
-    ) where
-        DefaultAllocator: Allocator<N, R, C> + Allocator<N, R>,
-    {
-        let n = UD.nrows();
-        assert_eq!(n, UD.ncols());
-
-        for j in 0..n {
-            // Extract d and set diagonal to 1
-            d[j] = UD[(j, j)];
-            U[(j, j)] = self.one;
-            for i in 0..j {
-                U[(i, j)] = UD[(i, j)];
-                // Zero lower triangle of U
-                U[(j, i)] = self.zero;
-            }
-        }
-    }
-
     // Positive Definite matrix inversions built using UdU factorisation/
 
     /// Inverse of Positive Definite matrix.
@@ -598,25 +454,4 @@ impl<N: RealField> UDU<N> {
         rcond
     }
 
-    /// Inverse of Positive Definite matrix.
-    ///
-    /// Input: M is a symmetric matrix
-    ///
-    /// Output: M inverse of M, only updated if return value >0, detM determinant of original M if M is PSD
-    ///
-    /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
-    pub fn UdUinversePD_det<R: Dim, C: Dim>(&self, M: &mut MatrixMN<N, R, C>, detM: &mut N) -> N
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        let rcond = UDU::UdUfactor_variant2(self, M, M.nrows());
-        // Only invert and recompose if PD
-        if rcond > self.zero {
-            *detM = self.UdUdet(M);
-            let singular = self.UdUinverse(M);
-            assert!(!singular);
-            UDU::UdUrecompose_transpose(M);
-        }
-        rcond
-    }
 }

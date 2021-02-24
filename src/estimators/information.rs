@@ -15,7 +15,7 @@ use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, MatrixMN, MatrixN, RealField, VectorN};
 
 use crate::linalg::cholesky::UDU;
-use crate::mine::matrix::{check_positive};
+use crate::matrix::{check_positive};
 use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 

@@ -1,3 +1,5 @@
 //! Internal implementation
 
-pub mod matrix;
+mod mat;
+
+pub use mat::*;

@@ -15,7 +15,7 @@ use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanState, InformationState, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 use crate::linalg::cholesky;
-use crate::mine::matrix::check_positive;
+use crate::matrix::check_positive;
 
 /// Information State.
 ///

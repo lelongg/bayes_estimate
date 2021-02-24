@@ -23,7 +23,7 @@ use bayes_estimate::models::{
     Estimator, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
-use bayes_estimate::linalg::cholesky::UDU;
+use bayes_estimate::cholesky::UDU;
 use nalgebra::MatrixN;
 
 const DT: f64 = 0.01;
