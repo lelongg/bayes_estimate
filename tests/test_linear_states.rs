@@ -1,5 +1,4 @@
 use bayes_estimate::models::{UDState, InformationState, KalmanState};
-use nalgebra::storage::Storage;
 use nalgebra::{MatrixN, U2, Vector2};
 use bayes_estimate::models::KalmanEstimator;
 use bayes_estimate::estimators::information_root::InformationRootState;

@@ -121,9 +121,13 @@ impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootStat
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>
     {
-        let pred_inv = pred.Fx.clone().cholesky().ok_or("Fx not PD in predict")?.inverse();
+        let mut Fx_inv = pred.Fx.clone();
+        let invertable = Fx_inv.try_inverse_mut();
+        if !invertable {
+            return Err("Fx not invertable")?;
+        }
 
-        self.predict(x_pred, &LinearPredictModel{ Fx: pred_inv}, noise).map(|_rcond| {})
+        self.predict(x_pred, &LinearPredictModel{ Fx: Fx_inv }, noise).map(|_rcond| {})
     }
 }
 
