@@ -16,7 +16,7 @@ use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, Matr
 
 use crate::linalg::cholesky::UDU;
 use crate::mine::matrix::{check_positive};
-use crate::models::{InformationState, KalmanEstimator, KalmanState, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, Estimator};
+use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -74,7 +74,7 @@ where
     fn predict(
         &mut self,
         x_pred: VectorN<N, D>,
-        pred: &LinearPredictModel<N, D>,
+        fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         // Covariance
@@ -83,7 +83,7 @@ where
         check_positive(rcond, "I not PD in predict")?;
 
         // Predict information matrix, and state covariance
-        X.quadform_tr(N::one(), &pred.Fx, &X.clone(), N::zero());
+        X.quadform_tr(N::one(), &fx, &X.clone(), N::zero());
         X += &noise.Q;
 
         self.init(&KalmanState { x: x_pred, X })?;
@@ -151,7 +151,7 @@ where
 
     pub fn observe_info<ZD: Dim>(
         &self,
-        obs: &LinearObserveModel<N, D, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
         noise_inv: &MatrixN<N, ZD>,  // Inverse of correlated noise model
         z: &VectorN<N, ZD>
     ) -> InformationState<N, D>
@@ -159,11 +159,11 @@ where
         DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
     {
         // Observation Information
-        let HxTZI = obs.Hx.transpose() * noise_inv;
+        let HxTZI = hx.transpose() * noise_inv;
         // Calculate EIF i = Hx'*ZI*z
         let ii = &HxTZI * z;
         // Calculate EIF I = Hx'*ZI*Hx
-        let II = &HxTZI * &obs.Hx; // use column matrix trans(HxT)
+        let II = &HxTZI * hx; // use column matrix trans(HxT)
 
         InformationState { i: ii, I: II }
     }

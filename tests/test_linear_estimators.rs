@@ -19,11 +19,12 @@ use na::{MatrixMN, RealField};
 use nalgebra as na;
 
 use bayes_estimate::models::{
-    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel,
+    InformationState, KalmanState, UDState,
     Estimator, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 use bayes_estimate::linalg::cholesky::UDU;
+use nalgebra::MatrixN;
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -119,7 +120,7 @@ where
     fn predict_fn(
         &mut self,
         f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
-        pred: &LinearPredictModel<f64, D>,
+        fx: &MatrixN<f64, D>,
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
         where
@@ -129,7 +130,7 @@ where
     fn observe(
         &mut self,
         h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
-        obs: &LinearObserveModel<f64, D, U1>,
+        hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str>;
@@ -144,24 +145,24 @@ where
     fn predict_fn(
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
-        pred: &LinearPredictModel<f64, D>,
+        fx: &MatrixN<f64, D>,
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, fx, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
         &mut self,
         _h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
-        obs: &LinearObserveModel<f64, D, U1>,
+        hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        ExtendedLinearObserver::observe_innovation(self, s, obs, noise)
+        ExtendedLinearObserver::observe_innovation(self, s, hx, noise)
     }
 }
 
@@ -177,17 +178,17 @@ where
     fn predict_fn(
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
-        pred: &LinearPredictModel<f64, D>,
+        fx: &MatrixN<f64, D>,
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, fx, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
         &mut self,
         h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
-        obs: &LinearObserveModel<f64, D, U1>,
+        hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str>
@@ -196,7 +197,7 @@ where
     {
         let x = self.state().unwrap();
         let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
-        let info = self.observe_info(obs, &noise_inv, &(s + h(&x, &x)));
+        let info = self.observe_info(hx, &noise_inv, &(s + h(&x, &x)));
         self.add_information(&info);
         Ok(())
     }
@@ -214,17 +215,17 @@ where
     fn predict_fn(
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
-        pred: &LinearPredictModel<f64, D>,
+        fx: &MatrixN<f64, D>,
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        self.predict::<U1>(pred, x_pred, noise).unwrap();
+        self.predict::<U1>(fx, x_pred, noise).unwrap();
     }
 
     fn observe(
         &mut self,
         h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
-        obs: &LinearObserveModel<f64, D, U1>,
+        hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str> {
@@ -235,7 +236,7 @@ where
         udu.UdUfactor_variant2(&mut ud, s.nrows());
 
         let noise_fac = CorrelatedFactorNoise::<f64, U1>{ UD: ud };
-        self.observe_correlated::<U1>(obs, &noise_fac, &z).map(|_rcond| {})
+        self.observe_correlated::<U1>(hx, &noise_fac, &z).map(|_rcond| {})
     }
 }
 
@@ -301,7 +302,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
     fn predict_fn(
         &mut self,
         f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
-        _pred: &LinearPredictModel<f64, D>,
+        _fx: &MatrixN<f64, D>,
         _x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
@@ -311,7 +312,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
     fn observe(
         &mut self,
         h: fn(&VectorN<f64, D>, &VectorN<f64, D>) -> VectorN<f64, U1>,
-        _obs: &LinearObserveModel<f64, D, U1>,
+        _hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str> {
@@ -362,17 +363,13 @@ where
 
     let f_vv: f64 = (-DT * V_GAMMA).exp();
 
-    let linear_pred_model = LinearPredictModel {
-        Fx: new_copy(d, d, &Matrix2::new(1., DT, 0., f_vv)),
-    };
+    let linear_pred_model = new_copy(d, d, &Matrix2::new(1., DT, 0., f_vv));
     let additive_noise = CoupledNoise {
         q: Vector1::new(DT * sqr((1. - f_vv) * V_NOISE)),
         G: new_copy(d, U1, &Matrix2x1::new(0.0, 1.0)),
     };
 
-    let linear_obs_model = LinearObserveModel {
-        Hx: new_copy(U1, d, &Matrix1x2::new(1.0, 0.0)),
-    };
+    let linear_obs_model = new_copy(U1, d, &Matrix1x2::new(1.0, 0.0));
     let co_obs_noise = CorrelatedNoise {
         Q: Matrix1::new(sqr(OBS_NOISE)),
     };

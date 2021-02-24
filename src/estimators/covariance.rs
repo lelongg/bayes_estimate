@@ -13,8 +13,9 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, U1, MatrixN, RealField, Ve
 
 use crate::linalg::cholesky;
 use crate::mine::matrix::{check_non_negativ};
-use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, Estimator};
+use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise};
+use nalgebra::MatrixMN;
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
 where
@@ -65,33 +66,31 @@ where
     fn predict(
         &mut self,
         x_pred: VectorN<N, D>,
-        pred: &LinearPredictModel<N, D>,
+        fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         self.x = x_pred;
         // X = Fx.X.FX' + Q
-        self.X.quadform_tr(N::one(), &pred.Fx, &self.X.clone(), N::zero());
+        self.X.quadform_tr(N::one(), &fx, &self.X.clone(), N::zero());
         self.X += &noise.Q;
 
         Ok(())
     }
 }
 
-impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD>
-    for KalmanState<N, D>
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for KalmanState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
 {
     fn observe_innovation(
         &mut self,
         s: &VectorN<N, ZD>,
-        obs: &LinearObserveModel<N, D, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str> {
-        let XHt = &self.X * obs.Hx.transpose();
+        let XHt = &self.X * hx.transpose();
         // S = Hx.X.Hx' + Q
-        let S = &obs.Hx * &XHt + &noise.Q;
+        let S = hx * &XHt + &noise.Q;
 
         // Inverse innovation covariance
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();

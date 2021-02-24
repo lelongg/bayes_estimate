@@ -42,29 +42,6 @@ where
     pub I: MatrixN<N, D>,
 }
 
-
-/// Linear prediction model.
-///
-/// Prediction is represented by a state transition matrix.
-pub struct LinearPredictModel<N: SimdRealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D>,
-{
-    /// State tramsition matrix
-    pub Fx: MatrixN<N, D>,
-}
-
-/// Linear observation model.
-///
-/// Observation is represented by an observation matrix.
-pub struct LinearObserveModel<N: SimdRealField, D: Dim, ZD: Dim>
-    where
-        DefaultAllocator: Allocator<N, ZD, D>,
-{
-    /// Observation matrix
-    pub Hx: MatrixMN<N, ZD, D>,
-}
-
 /// A state estimator.
 pub trait Estimator<N: SimdRealField, D: Dim>
     where
@@ -99,7 +76,7 @@ where
     fn predict(
         &mut self,
         x_pred: VectorN<N, D>,
-        pred: &LinearPredictModel<N, D>,
+        Fx: &MatrixN<N, D>, // State tramsition matrix
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>;
 }
@@ -129,7 +106,7 @@ where
     fn observe_innovation(
         &mut self,
         s: &VectorN<N, ZD>,
-        obs: &LinearObserveModel<N, D, ZD>,
+        Hx: &MatrixMN<N, ZD, D>, // Observation matrix
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str>;
 }

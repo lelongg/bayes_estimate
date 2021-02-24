@@ -12,7 +12,7 @@ use na::{SimdRealField, Dim, DimName, Dynamic, U1};
 use na::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
-use crate::models::{KalmanState, InformationState, KalmanEstimator, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
+use crate::models::{KalmanState, InformationState, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 use crate::linalg::cholesky;
 use crate::mine::matrix::check_positive;
@@ -117,17 +117,17 @@ impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootStat
     fn predict(
         &mut self,
         x_pred: VectorN<N, D>,
-        pred: &LinearPredictModel<N, D>,
+        fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>
     {
-        let mut Fx_inv = pred.Fx.clone();
+        let mut Fx_inv = fx.clone();
         let invertable = Fx_inv.try_inverse_mut();
         if !invertable {
             return Err("Fx not invertable")?;
         }
 
-        self.predict(x_pred, &LinearPredictModel{ Fx: Fx_inv }, noise).map(|_rcond| {})
+        self.predict(x_pred, &Fx_inv, noise).map(|_rcond| {})
     }
 }
 
@@ -143,14 +143,14 @@ impl<N: RealField, D: DimName, ZD: DimName> ExtendedLinearObserver<N, D, ZD> for
     fn observe_innovation(
         &mut self,
         s: &VectorN<N, ZD>,
-        obs: &LinearObserveModel<N, D, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str>
     {
         let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in predict")?.inverse();
         let x = self.state()?;
 
-        self.observe_info(obs, &noise_inv, &(s + &obs.Hx * x))
+        self.observe_info(hx, &noise_inv, &(s + hx * x))
     }
 }
 
@@ -203,20 +203,19 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
 
     pub fn observe_info<ZD: DimName>(
         &mut self,
-        obs: &LinearObserveModel<N, D, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
         noise_inv: &MatrixN<N, ZD>, // Inverse of correlated noise model
         z: &VectorN<N, ZD>,
     ) -> Result<(), &'static str>
         where
             DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD>
             + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic>
-            + Allocator<N, ZD, U1>
-            + Allocator<N, D> + Allocator<N, ZD>
+            + Allocator<N, ZD, U1> + Allocator<N, D> + Allocator<N, ZD>
     {
         let x_size = self.r.nrows();
         let z_size = z.nrows();
         // Size consistency, z to model
-        if z_size != obs.Hx.nrows() {
+        if z_size != hx.nrows() {
             return Result::Err("observation and model size inconsistent");
         }
 
@@ -224,7 +223,7 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         let mut A = DMatrix::<N>::zeros(x_size + z_size, x_size+1); // Prefill with identity for top left and zero's in off diagonals
         A.slice_mut((0, 0), (x_size, x_size)).copy_from(&self.R);
         A.slice_mut((0, x_size), (x_size, 1)).copy_from(&self.r);
-        let B = noise_inv * &obs.Hx;
+        let B = noise_inv * hx;
         A.slice_mut((x_size, 0), (z_size, x_size)).copy_from(&B);
         let C = noise_inv * z;
         A.slice_mut((x_size, x_size),(z_size,1)).copy_from(&C);
