@@ -3,15 +3,11 @@
 //! Information state estimation.
 //!
 //! A discrete Bayesian estimator that uses a linear information representation [`InformationState`] of the system for estimation.
-//! The information state is simply the i,I pair the dimensions of both are the dimensions of the system.
 //!
-//! The Kalman state and Information state are equivalent:
-//! I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
+//! A fundamental property of the information state is that information is additive. So if there is more information
+//! about the system (such as by an observation) this can simply be added to i,I of the information state.
 //!
-//! A fundamental property of the Information state is that Information is additive. So if there is more information
-//! about the system (such as by an observation) this can simply be added to i,I Information state.
-//!
-//! The linear information state representation can also be used for non-linear system by using linearised forms of the system model.
+//! The linear representation can also be used for non-linear systems by using linearised models.
 //!
 //! [`InformationState`]: ../models/struct.InformationState.html
 
@@ -77,8 +73,8 @@ where
 {
     fn predict(
         &mut self,
-        pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
+        pred: &LinearPredictModel<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         // Covariance

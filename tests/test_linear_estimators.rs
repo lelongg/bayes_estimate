@@ -19,11 +19,10 @@ use na::{MatrixMN, RealField};
 use nalgebra as na;
 
 use bayes_estimate::models::{
-    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel, KalmanEstimator, ExtendedLinearObserver,
-    Estimator, ExtendedLinearPredictor, FunctionPredictor, FunctionObserver
+    InformationState, KalmanState, UDState, LinearObserveModel, LinearPredictModel,
+    Estimator, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
-use bayes_estimate::estimators::unscented::UnscentedKallmanState;
 use bayes_estimate::linalg::cholesky::UDU;
 
 const DT: f64 = 0.01;
@@ -58,7 +57,7 @@ fn test_ud_u2() {
 
 #[test]
 fn test_unscented_u2() {
-    test_estimator(&mut UnscentedKallmanState::new_zero(U2));
+    test_estimator(&mut UnscentedKalmanState::new_zero(U2));
 }
 
 #[test]
@@ -78,7 +77,7 @@ fn test_ud_dynamic() {
 
 #[test]
 fn test_unscented_dynamic() {
-    test_estimator(&mut UnscentedKallmanState::new_zero(Dynamic::new(2)));
+    test_estimator(&mut UnscentedKalmanState::new_zero(Dynamic::new(2)));
 }
 
 
@@ -149,7 +148,7 @@ where
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        ExtendedLinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
@@ -162,7 +161,7 @@ where
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        ExtendedLinearObserver::observe_innovation(self, obs, noise, s)
+        ExtendedLinearObserver::observe_innovation(self, s, obs, noise)
     }
 }
 
@@ -182,7 +181,7 @@ where
         x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        ExtendedLinearPredictor::<f64, D>::predict(self, pred, x_pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, pred, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
     }
 
     fn observe(
@@ -240,18 +239,63 @@ where
     }
 }
 
-/// Test UD estimator operations defined on a UDState.
-impl<D: Dim> TestEstimator<D> for UnscentedKallmanState<f64, D>
+/// Test Unscented estimator operations defined on an UnscentedKalmanState.
+pub struct UnscentedKalmanState<N:RealField, D: Dim>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+{
+    pub kalman: KalmanState<N, D>,
+    pub kappa: N,
+}
+
+impl<N: RealField, D: Dim> UnscentedKalmanState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+{
+    pub fn new_zero(d: D) -> UnscentedKalmanState<N, D> {
+        UnscentedKalmanState {
+            kalman: KalmanState::new_zero(d),
+            kappa: N::from_usize(3 - d.value()).unwrap(),
+        }
+    }
+}
+
+impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKalmanState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+{
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        return Ok(self.kalman.x.clone());
+    }
+}
+
+impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKalmanState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+{
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+        self.kalman.x.copy_from(&state.x);
+        self.kalman.X.copy_from(&state.X);
+
+        Ok(N::one())
+    }
+
+    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+        return Ok(
+            (N::one(), self.kalman.clone())
+        );
+    }
+}
+
+impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
     where
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D> + Allocator<f64, U1, D>,
-        DefaultAllocator: Allocator<f64, D, Dynamic>,
-        DefaultAllocator: Allocator<usize, D, Dynamic>,
+        DefaultAllocator: Allocator<usize, D, D>,
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
         DefaultAllocator: Allocator<f64, D, U1>  {
 
     fn trace_state(&self) {
-        let columns: MatrixMN<f64, D, Dynamic> = MatrixMN::from_columns(self.UU.as_slice());
-        println!("{:}", columns);
+        println!("{:}", self.kalman.X);
     }
 
     fn predict_fn(
@@ -261,7 +305,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKallmanState<f64, D>
         _x_pred: VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
-        FunctionPredictor::predict(self, f, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        self.kalman.predict_unscented(f, &CorrelatedNoise::from_coupled::<U1>(noise), self.kappa).unwrap();
     }
 
     fn observe(
@@ -271,7 +315,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKallmanState<f64, D>
         noise: &CorrelatedNoise<f64, U1>,
         s: &Vector1<f64>,
     ) -> Result<(), &'static str> {
-        FunctionObserver::<f64, D, U1>::observe_innovation(self, h, noise, s)
+        self.kalman.observe_unscented(h, noise, s, self.kappa)
     }
 }
 

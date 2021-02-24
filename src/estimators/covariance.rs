@@ -2,10 +2,9 @@
 
 //! Covariance state estimation.
 //!
-//! A discrete Bayesian estimator that uses a Kalman state representation [`KalmanState`] of the system for estimation.
-//! The Kalman state is simply the x,X pair the dimensions of both are the dimensions of the system.
+//! A discrete Bayesian estimator that uses the 'Kalman' linear representation [`KalmanState`] of the system for estimation.
 //!
-//! The linear Kalman state representation can also be used for non-linear systems by using linearised forms of the system model.
+//! The linear representation can also be used for non-linear systems by using linearised models.
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
@@ -65,8 +64,8 @@ where
 {
     fn predict(
         &mut self,
-        pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
+        pred: &LinearPredictModel<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         self.x = x_pred;
@@ -82,17 +81,13 @@ impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD>
     for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, ZD, ZD>
-        + Allocator<N, ZD, D>
-        + Allocator<N, D, ZD>
-        + Allocator<N, D>
-        + Allocator<N, ZD>
+        + Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
 {
     fn observe_innovation(
         &mut self,
+        s: &VectorN<N, ZD>,
         obs: &LinearObserveModel<N, D, ZD>,
         noise: &CorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
     ) -> Result<(), &'static str> {
         let XHt = &self.X * obs.Hx.transpose();
         // S = Hx.X.Hx' + Q

@@ -1,19 +1,10 @@
 #![allow(non_snake_case)]
 
-//! Information state estimation.
+//! Information 'square root' state estimation.
 //!
-//! A discrete Bayesian estimator that uses a linear information representation [`InformationState`] of the system for estimation.
-//! The information state is simply the i,I pair the dimensions of both are the dimensions of the system.
+//! A discrete Bayesian estimator that uses a linear information root representation [`InformationRootState`] of the system for estimation.
 //!
-//! The Kalman state and Information state are equivalent:
-//! I == inverse(X), i = I.x, since both I and X are PSD a conversion is numerically possible except with singular I or X.
-//!
-//! A fundamental property of the Information state is that Information is additive. So if there is more information
-//! about the system (such as by an observation) this can simply be added to i,I Information state.
-//!
-//! The linear information state representation can also be used for non-linear system by using linearised forms of the system model.
-//!
-//! [`InformationState`]: ../models/struct.InformationState.html
+//! The linear representation can also be used for non-linear systems by using linearised models.
 
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, DMatrix, MatrixMN, MatrixN, RealField, VectorN, QR};
@@ -23,10 +14,12 @@ use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanState, InformationState, KalmanEstimator, LinearObserveModel, LinearPredictModel, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 use crate::linalg::cholesky;
+use crate::mine::matrix::check_positive;
 
 /// Information State.
 ///
-/// Linear representation as a information state vector and the information (symmetric positive semi-definite) matrix.
+/// Linear representation as a information root state vector and the information root (upper triangular) matrix.
+/// For a given [KalmanState] the information root state R.R' == inverse(X), r == R.x
 #[derive(PartialEq, Clone)]
 pub struct InformationRootState<N: SimdRealField, D: Dim>
     where
@@ -48,6 +41,24 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
             R: MatrixN::zeros_generic(d, d),
         }
     }
+
+    // pub fn init(&mut self, state: &InformationState<N, D>) -> Result<N, &'static str> {
+    //     // Information Root
+    //     self.R = state.I.clone().cholesky().ok_or("X not PD")?.l().transpose();
+    //
+    //     // Information Root state r=R*x
+    //     self.r = &self.R.transpose() * &state.i;
+    //
+    //     Result::Ok(cholesky::UDU::UdUrcond(&state.I))
+    // }
+    //
+    pub fn information_state(&self) -> Result<(N, InformationState<N, D>), &'static str> {
+        let I = &self.R.transpose() * &self.R ; // I = R'R
+        let x = self.state()?;
+        let i = &I * x;
+
+        Result::Ok((N::one(), InformationState { i, I }))
+    }
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for InformationRootState<N, D>
@@ -55,10 +66,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for InformationRootState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        let RI = self.R.clone().cholesky().ok_or("R not PD")?.inverse();
-        let x = RI * &self.r;
-
-        Result::Ok(x)
+        self.kalman_state().map(|res| res.1.x)
     }
 }
 
@@ -68,7 +76,12 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         // Information Root
-        self.R = state.X.clone().cholesky().ok_or("X not PD")?.inverse();
+        let udu = UDU::new();
+        self.R.copy_from(&state.X);
+        let rcond = udu.UCfactor_n(&mut self.R, state.X.nrows());
+        check_positive(rcond, "X not PD")?;
+        let singular = udu.UTinverse(&mut self.R);
+        assert!(!singular, "singular R");   // unexpected check_positive should prevent singular
 
         // Information Root state r=R*x
         self.r = &self.R * &state.x;
@@ -96,14 +109,14 @@ impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootStat
 {
     fn predict(
         &mut self,
-        pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
+        pred: &LinearPredictModel<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>
     {
         let pred_inv = pred.Fx.clone().cholesky().ok_or("Fx not PD in predict")?.inverse();
 
-        self.predict(&LinearPredictModel{ Fx: pred_inv}, x_pred, noise).map(|_rcond| {})
+        self.predict(x_pred, &LinearPredictModel{ Fx: pred_inv}, noise).map(|_rcond| {})
     }
 }
 
@@ -118,9 +131,9 @@ impl<N: RealField, D: DimName, ZD: DimName> ExtendedLinearObserver<N, D, ZD> for
 {
     fn observe_innovation(
         &mut self,
+        s: &VectorN<N, ZD>,
         obs: &LinearObserveModel<N, D, ZD>,
         noise: &CorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
     ) -> Result<(), &'static str>
     {
         let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in predict")?.inverse();

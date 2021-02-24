@@ -30,6 +30,7 @@ where
 /// Information state.
 ///
 /// Linear representation as a information state vector and the information (symmetric positive semi-definite) matrix.
+/// For a given [KalmanState] the information state I == inverse(X), i == I.x
 #[derive(PartialEq, Clone)]
 pub struct InformationState<N: SimdRealField, D: Dim>
 where
@@ -65,7 +66,6 @@ pub struct LinearObserveModel<N: SimdRealField, D: Dim, ZD: Dim>
 }
 
 /// A state estimator.
-///
 pub trait Estimator<N: SimdRealField, D: Dim>
     where
         DefaultAllocator: Allocator<N, D>,
@@ -74,7 +74,7 @@ pub trait Estimator<N: SimdRealField, D: Dim>
     fn state(&self) -> Result<VectorN<N, D>, &'static str>;
 }
 
-/// A Kalman filter (estimator).
+/// A Kalman estimator.
 ///
 /// The linear Kalman state representation x,X is used to represent the system.
 pub trait KalmanEstimator<N: SimdRealField, D: Dim>
@@ -88,23 +88,23 @@ where
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
 }
 
-/// A extended linear predictor.
+/// An extended linear predictor.
 ///
-/// Uses a Linear model with additive noise.
+/// Uses a non-linear state prediction with linear estimation model with additive noise.
 pub trait ExtendedLinearPredictor<N: SimdRealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    /// State prediction with a linear prediction model and additive noise.
+    /// Uses a non-linear state prediction with linear estimation model with additive noise.
     fn predict(
         &mut self,
-        pred: &LinearPredictModel<N, D>,
         x_pred: VectorN<N, D>,
+        pred: &LinearPredictModel<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>;
 }
 
-/// A functional predictor.
+/// A functional predictor with correlated observation noise.
 ///
 /// Uses a function model with additive noise.
 pub trait FunctionPredictor<N: SimdRealField, D: Dim>
@@ -119,17 +119,18 @@ pub trait FunctionPredictor<N: SimdRealField, D: Dim>
 
 /// A extended linear observer with correlated observation noise.
 ///
-/// Uses a Linear observation model with correlated additive observation noise.
+/// Uses a non-linear state observation with linear estimation model with additive noise.
 pub trait ExtendedLinearObserver<N: SimdRealField, D: Dim, ZD: Dim>
 where
     DefaultAllocator:
         Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD>
 {
+    /// Uses a non-linear state observation with linear estimation model with additive noise.
     fn observe_innovation(
         &mut self,
+        s: &VectorN<N, ZD>,
         obs: &LinearObserveModel<N, D, ZD>,
         noise: &CorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
     ) -> Result<(), &'static str>;
 }
 

@@ -2,14 +2,9 @@
 
 //! UD 'square root' state estimation.
 //!
-//! A discrete Bayesian filter that uses a 'square root' factorisation of the Kalman state representation [`KalmanState`] of the system for estimation.
-//!
-//! The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and d is a diagonal vector.
-//! Numerically the this 'square root' factorisation is advantageous as condition of when inverting is improved by the square root.
+//! A discrete Bayesian estimator that uses a 'square root' factorisation of the Kalman state representation [`UDState`] of the system for estimation.
 //!
 //! The linear representation can also be used for non-linear system by using linearised forms of the system model.
-//!
-//! [`KalmanState`]: ../models/struct.KalmanState.html
 
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, storage::Storage};
@@ -23,9 +18,10 @@ use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 /// UD State representation.
 ///
 /// Linear representation as a state vector and 'square root' factorisation of the state covariance matrix.
+/// Numerically the this 'square root' factorisation is advantageous as conditioning for inverting is improved by the square root.
 ///
-/// The state covariance X is factorised with a modified Cholesky factorisation so U.d.U' == X, where U is upper triangular matrix (0 diagonal) and
-/// d is a diagonal vector. U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
+/// The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and d is a diagonal vector.
+/// U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
 pub struct UDState<N: RealField, D: Dim, XUD: Dim>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,

@@ -1,81 +1,124 @@
 #![allow(non_snake_case)]
 
-//! Unscented state estimation.
+//! Julier-Uhlmann 'Unscented' state estimation.
 //!
+//! A discrete Bayesian estimator that uses the [`KalmanState`] linear representation of the system.
+//! The 'Unscented' transform is used for non-linear state predictions and observation.
+//!
+//! The 'Unscented' transforma interpolates the non-linear predict and observe function.
+//! Unscented transforms can be optimised for particular functions by vary the Kappa parameter from its usual value of 1.
+//! Implements the classic Duplex 'Unscented' transform.
 
 use simba::simd::SimdComplexField;
 
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN, storage::Storage};
 
-use crate::linalg::cholesky::UDU;
-use crate::models::{KalmanEstimator, KalmanState, FunctionPredictor, FunctionObserver, Estimator};
+use crate::models::KalmanState;
 use crate::noise::{CorrelatedNoise};
 use crate::mine::matrix::{check_non_negativ};
-use crate::linalg::cholesky;
+use crate::linalg::cholesky::UDU;
 
 
-pub struct UnscentedKallmanState<N:RealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
-    pub xX: KalmanState<N, D>,
-    /// Unscented state
-    pub UU: Vec<VectorN<N, D>>,
-    pub kappa: N,
-}
-
-impl<N: RealField, D: Dim> UnscentedKallmanState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
-    pub fn new_zero(d: D) -> UnscentedKallmanState<N, D> {
-        let usize = 2 * d.value() + 1;
-        let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(usize);
-        let zu: VectorN<N, D> = VectorN::zeros_generic(d, U1);
-        for _u in 0..usize {
-            UU.push(zu.clone());
-        }
-        UnscentedKallmanState {
-            xX: KalmanState::new_zero(d),
-            UU,
-            kappa: N::from_usize(3 - d.value()).unwrap(),
-        }
-    }
-}
-
-impl<N: RealField, D: Dim> FunctionPredictor<N, D> for UnscentedKallmanState<N, D>
+impl<N: RealField, D: Dim> KalmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>
 {
-    // State prediction with a linear prediction model and additive noise.
-    fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>, noise: &CorrelatedNoise<N, D>) -> Result<(), &'static str>
+    /// State prediction with a functional prediction model and additive noise.
+    pub fn predict_unscented(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>, noise: &CorrelatedNoise<N, D>, kappa: N) -> Result<(), &'static str>
     {
         // Create Unscented distribution
-        let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
-        let _rcond = unscented(&mut self.UU, &self.xX, x_kappa)?;
+        let x_kappa = N::from_usize(self.x.nrows()).unwrap() + kappa;
+        let (mut UU, _rcond) = unscented(&self, x_kappa)?;
 
         // Predict points of XX using supplied predict model
-        for c in 0..(self.UU.len()) {
-            let ff = f(&&self.UU[c]);
-            self.UU[c].copy_from(&ff);
+        for c in 0..(UU.len()) {
+            let ff = f(&UU[c]);
+            UU[c].copy_from(&ff);
         }
 
         // State covariance
-        kalman(&mut self.xX, &self.UU, self.kappa);
+        kalman(self, &UU, kappa);
         // Additive Noise
-        self.xX.X += &noise.Q;
+        self.X += &noise.Q;
+
+        Ok(())
+    }
+
+    pub fn observe_unscented<ZD: Dim>(&mut self, h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>, kappa: N) -> Result<(), &'static str>
+        where
+            DefaultAllocator: Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, U1, ZD> + Allocator<N, ZD>
+    {
+        // Create Unscented distribution
+        let x_kappa = N::from_usize(self.x.nrows()).unwrap() + kappa;
+        let (UU, _rcond) = unscented(&self, x_kappa)?;
+
+        // Predict points of ZZ using supplied observation model
+        let usize = UU.len();
+        let mut ZZ: Vec<VectorN<N, ZD>> = Vec::with_capacity(usize);
+        let xm = &self.x;
+        for i in 0..usize {
+            ZZ.push(h(&UU[i], xm))
+        }
+
+        // Mean and covarnaic of observation distribution
+        let mut zZ = KalmanState::<N, ZD>::new_zero(s.data.shape().0);
+        kalman(&mut zZ, &ZZ, kappa);
+        for i in 0..ZZ.len() {
+            ZZ[i] -= &zZ.x;
+        }
+
+        let two = N::from_u32(2).unwrap();
+
+        // Correlation of state with observation: Xxz
+        // Center point, premult here by 2 for efficiency
+        let x = &self.x;
+        let mut XZ;
+        {
+            let XX0 = &UU[0] - x;
+            let ZZ0t = ZZ[0].transpose();
+            XZ = XX0 * ZZ0t;
+            XZ *= two * kappa;
+        }
+
+        // Remaining Unscented points
+        for i in 1..ZZ.len() {
+            let XXi = (&UU[i] - x).clone_owned();
+            let ZZit = ZZ[i].transpose();
+            XZ += XXi * ZZit;
+        }
+        XZ /= two * x_kappa;
+
+        let S = zZ.X + &noise.Q;
+
+        // Inverse innovation covariance
+        let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
+
+        // Kalman gain, X*Hx'*SI
+        let W = &XZ * SI;
+
+        // State update
+        self.x += &W * s;
+        // X -= W.S.W'
+        self.X.quadform_tr(N::one().neg(), &W, &S, N::one());
 
         Ok(())
     }
 }
 
-pub fn unscented<N: RealField, D: Dim>(UU: &mut Vec<VectorN<N, D>>, xX: &KalmanState<N, D>, scale: N) -> Result<N, &'static str>
+pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Result<(Vec<VectorN<N, D>>, N), &'static str>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
     let xsize = xX.x.nrows();
     let udu = UDU::new();
+
+    let usize = 2 * xsize + 1;
+    let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(usize);
+    let zu: VectorN<N, D> = VectorN::zeros_generic(xX.x.data.shape().0, U1);
+    for _u in 0..usize {
+        UU.push(zu.clone());
+    }
 
     let mut sigma = xX.X.clone();
     let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
@@ -94,70 +137,7 @@ pub fn unscented<N: RealField, D: Dim>(UU: &mut Vec<VectorN<N, D>>, xX: &KalmanS
         UU[c + 1 + xsize] = xm;
     }
 
-    Ok(rcond)
-}
-
-impl<N: RealField, D: Dim, ZD: Dim> FunctionObserver<N, D, ZD> for UnscentedKallmanState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
-        DefaultAllocator: Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, U1, ZD> + Allocator<N, ZD> {
-
-    fn observe_innovation(&mut self, h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>) -> Result<(), &'static str> {
-        // Create Unscented distribution
-        let x_kappa = N::from_usize(self.xX.x.nrows()).unwrap() + self.kappa;
-        unscented(&mut self.UU, &self.xX, x_kappa)?;
-
-        // Predict points of ZZ using supplied observation model
-        let usize = self.UU.len();
-        let mut ZZ: Vec<VectorN<N, ZD>> = Vec::with_capacity(usize);
-        let xm = &self.xX.x;
-        for i in 0..usize {
-            ZZ.push(h(&self.UU[i], xm))
-        }
-
-        // Mean and covarnaic of observation distribution
-        let mut zZ = KalmanState::<N, ZD>::new_zero(s.data.shape().0);
-        kalman(&mut zZ, &ZZ, self.kappa);
-        for i in 0..ZZ.len() {
-            ZZ[i] -= &zZ.x;
-        }
-
-        let two = N::from_u32(2).unwrap();
-
-        // Correlation of state with observation: Xxz
-        // Center point, premult here by 2 for efficiency
-        let x = &self.xX.x;
-        let mut XZ;
-        {
-            let XX0 = &self.UU[0] - x;
-            let ZZ0t = ZZ[0].transpose();
-            XZ = XX0 * ZZ0t;
-            XZ *= two * self.kappa;
-        }
-
-        // Remaining Unscented points
-        for i in 1..ZZ.len() {
-            let XXi = (&self.UU[i] - x).clone_owned();
-            let ZZit = ZZ[i].transpose();
-            XZ += XXi * ZZit;
-        }
-        XZ /= two * x_kappa;
-
-        let S = zZ.X + &noise.Q;
-
-        // Inverse innovation covariance
-        let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
-
-        // Kalman gain, X*Hx'*SI
-        let W = &XZ * SI;
-
-        // State update
-        self.xX.x += &W * s;
-        // X -= W.S.W'
-        self.xX.X.quadform_tr(N::one().neg(), &W, &S, N::one());
-
-        Ok(())
-    }
+    Ok((UU,rcond))
 }
 
 pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<VectorN<N, D>>, scale: N)
@@ -194,32 +174,3 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<Vect
     }
     state.X /= two * x_scale;
 }
-
-impl<N: RealField, D: Dim> Estimator<N, D> for UnscentedKallmanState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
-    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        return Ok(self.xX.x.clone());
-    }
-}
-
-impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKallmanState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
-        self.xX.x.copy_from(&state.x);
-        self.xX.X.copy_from(&state.X);
-        check_non_negativ(cholesky::UDU::UdUrcond(&self.xX.X), "X not PSD")?;
-
-        Ok(N::one())
-    }
-
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        return Ok(
-            (N::one(), self.xX.clone())
-        );
-    }
-}
-
