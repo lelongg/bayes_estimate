@@ -105,8 +105,7 @@ fn sqr(x: f64) -> f64 {
 }
 
 /// Define the estimator operations to be tested.
-trait TestEstimator<D: Dim>:
-    Estimator<f64, D> + KalmanEstimator<f64, D>
+trait TestEstimator<D: Dim>: Estimator<f64, D> + KalmanEstimator<f64, D>
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
@@ -121,7 +120,7 @@ where
         &mut self,
         f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
-        x_pred: VectorN<f64, D>,
+        x_pred: &VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
         where
             DefaultAllocator: Allocator<f64, D, U1> + Allocator<f64, U1>;
@@ -146,7 +145,7 @@ where
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
-        x_pred: VectorN<f64, D>,
+        x_pred: &VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
         ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, fx, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
@@ -179,7 +178,7 @@ where
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
-        x_pred: VectorN<f64, D>,
+        x_pred: &VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
         ExtendedLinearPredictor::<f64, D>::predict(self, x_pred, fx, &CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
@@ -216,7 +215,7 @@ where
         &mut self,
         _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
-        x_pred: VectorN<f64, D>,
+        x_pred: &VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
         self.predict::<U1>(fx, x_pred, noise).unwrap();
@@ -303,7 +302,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
         &mut self,
         f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         _fx: &MatrixN<f64, D>,
-        _x_pred: VectorN<f64, D>,
+        _x_pred: &VectorN<f64, D>,
         noise: &CoupledNoise<f64, D, U1>)
     {
         self.kalman.predict_unscented(f, &CorrelatedNoise::from_coupled::<U1>(noise), self.kappa).unwrap();
@@ -388,7 +387,7 @@ where
     for _c in 0..2 {
         let predict_x = Estimator::state(est).unwrap();
         let predict_xp = fx(&predict_x);
-        est.predict_fn(fx, &linear_pred_model, predict_xp, &additive_noise);
+        est.predict_fn(fx, &linear_pred_model, &predict_xp, &additive_noise);
         let pp = KalmanEstimator::kalman_state(est).unwrap().1;
         println!("pred={:.6}{:.6}", pp.x, pp.X);
 

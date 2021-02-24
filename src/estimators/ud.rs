@@ -74,7 +74,7 @@ where
     pub fn predict<QD: Dim>(
         &mut self,
         fx: &MatrixN<N, D>,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
@@ -259,17 +259,16 @@ where
         &mut self,
         scratch: &mut PredictScratch<N, XUD>,
         fx: &MatrixN<N, D>,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
             DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
     {
-        self.x = x_pred;
+        self.x = x_pred.clone();
 
         // Predict UD from model
         let rcond = UDState::predictGq(self, scratch, &fx, &noise.G, &noise.q);
-
         matrix::check_non_negativ(rcond, "X not PSD")
     }
 
@@ -463,12 +462,12 @@ where
                         // UD(j,k) unaffected
                     }
                 }
-                //PD
+                // PD
                 else {
                     // Negative
                     return self.udu.minus_one;
                 }
-            } //MWG-S loop
+            } // MWG-S loop
 
             // Transpose and Zero lower triangle
             for j in 1..n

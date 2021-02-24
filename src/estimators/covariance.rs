@@ -65,11 +65,11 @@ where
 {
     fn predict(
         &mut self,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
-        self.x = x_pred;
+        self.x = x_pred.clone();
         // X = Fx.X.FX' + Q
         self.X.quadform_tr(N::one(), &fx, &self.X.clone(), N::zero());
         self.X += &noise.Q;

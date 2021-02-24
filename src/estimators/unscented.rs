@@ -33,8 +33,7 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
 
         // Predict points of XX using supplied predict model
         for c in 0..(UU.len()) {
-            let ff = f(&UU[c]);
-            UU[c].copy_from(&ff);
+            UU[c] = f(&UU[c]);
         }
 
         // State covariance
@@ -64,7 +63,7 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
         // Mean and covarnaic of observation distribution
         let mut zZ = KalmanState::<N, ZD>::new_zero(s.data.shape().0);
         kalman(&mut zZ, &ZZ, kappa);
-        for i in 0..ZZ.len() {
+        for i in 0..usize {
             ZZ[i] -= &zZ.x;
         }
 
@@ -113,28 +112,22 @@ pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Resu
     let xsize = xX.x.nrows();
     let udu = UDU::new();
 
-    let usize = 2 * xsize + 1;
-    let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(usize);
-    let zu: VectorN<N, D> = VectorN::zeros_generic(xX.x.data.shape().0, U1);
-    for _u in 0..usize {
-        UU.push(zu.clone());
-    }
-
     let mut sigma = xX.X.clone();
     let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
 
     check_non_negativ(rcond, "Unscented X not PSD")?;
     sigma *= scale.simd_sqrt();
 
-    // Generate XX with the same sample Mean and Covariance
-    UU[0] = xX.x.clone();
+    // Generate UU with the same sample Mean and Covariance
+    let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(2 * xsize + 1);
+    UU.push(xX.x.clone());
 
     for c in 0..xsize {
         let sigmaCol = sigma.column(c);
         let xp: VectorN<N, D> = &xX.x + &sigmaCol;
-        UU[c + 1] = xp;
+        UU.push(xp);
         let xm: VectorN<N, D> = &xX.x - &sigmaCol;
-        UU[c + 1 + xsize] = xm;
+        UU.push( xm);
     }
 
     Ok((UU,rcond))
@@ -147,30 +140,26 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<Vect
     let two = N::from_u32(2).unwrap();
     let half = N::one() / two;
 
-    let mut tXX = XX.clone();
     let x_scale = N::from_usize((XX.len()-1)/2).unwrap() + scale;
     // Mean of predicted distribution: x
-    state.x = &tXX[0] * scale;
-    for i in 1..tXX.len() {
-        state.x += tXX[i].scale(half);
+    state.x = &XX[0] * scale;
+    for i in 1..XX.len() {
+        state.x += XX[i].scale(half);
     }
     state.x /= x_scale;
+
     // Covariance of distribution: X
-    // Subtract mean from each point in tXX
-    for i in 0..tXX.len() {
-        tXX[i] -= &state.x;
-    }
     // Center point, premult here by 2 for efficiency
     {
-        let XX0 = &tXX[0];
+        let XX0 = &XX[0] - &state.x;
         let XX0t = XX0.transpose() * two * scale;
-        state.X.copy_from(&(XX0 * XX0t));
+        state.X = XX0 * XX0t;
     }
     // Remaining Unscented points
-    for i in 1..tXX.len() {
-        let XXi = &tXX[i];
+    for i in 1..XX.len() {
+        let XXi = &XX[i] - &state.x;
         let XXit = XXi.transpose();
-        state.X += &(XXi * XXit);
+        state.X += XXi * XXit;
     }
     state.X /= two * x_scale;
 }

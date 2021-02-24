@@ -116,7 +116,7 @@ impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootStat
 {
     fn predict(
         &mut self,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>

@@ -75,7 +75,7 @@ where
     /// Uses a non-linear state prediction with linear estimation model with additive noise.
     fn predict(
         &mut self,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         Fx: &MatrixN<N, D>, // State tramsition matrix
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str>;

@@ -73,20 +73,18 @@ where
 {
     fn predict(
         &mut self,
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
         fx: &MatrixN<N, D>,
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         // Covariance
-        let mut X = self.I.clone();
-        let rcond = UDU::new().UdUinversePD(&mut X);
-        check_positive(rcond, "I not PD in predict")?;
+        let mut X = self.I.clone().cholesky().ok_or("I not PD in predict")?.inverse();
 
         // Predict information matrix, and state covariance
         X.quadform_tr(N::one(), &fx, &X.clone(), N::zero());
         X += &noise.Q;
 
-        self.init(&KalmanState { x: x_pred, X })?;
+        self.init(&KalmanState { x: x_pred.clone_owned(), X })?;
 
         return Ok(())
     }
@@ -99,7 +97,7 @@ where
     /// Linear information predict.
     ///
     /// Computation is through information state i,I only.
-    /// Uses x(k+1|k) = Fx * x(k|k) instead of extended x(k+1|k) = f(x(k|k))
+    /// Uses Fx.x instead of extended f(x)
     ///
     /// The numerical solution used is particularly flexible. It takes
     /// particular care to avoid invertibility requirements for the noise and noise coupling g,Q
@@ -110,8 +108,7 @@ where
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
     where
-        DefaultAllocator:
-            Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>,
+        DefaultAllocator: Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>,
     {
         let I_shape = self.I.data.shape();
 
