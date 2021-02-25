@@ -8,7 +8,7 @@
 
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, storage::Storage};
-use na::{Dim, RealField, Dynamic, U1, DMatrix, MatrixMN, MatrixN, VectorN};
+use na::{Dim, RealField, U1, MatrixMN, MatrixN, VectorN};
 
 use crate::linalg::cholesky::UDU;
 use crate::matrix;
@@ -81,7 +81,7 @@ where
             DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>
     {
         let mut scratch = self.new_predict_scratch();
-        self.predict_use_scratch(&mut scratch, fx, x_pred, noise)
+        self.predict_use_scratch(&mut scratch, x_pred, fx, noise)
     }
 
     /// Implement observe using sequential observation updates.
@@ -103,7 +103,7 @@ where
         let mut scratch = self.new_observe_scratch();
 
         // Predict UD from model
-        UDState::observe_innovation_use_scratch(self, &mut scratch, hx, noise, s)
+        UDState::observe_innovation_use_scratch(self, &mut scratch, s, hx, noise)
     }
 
 }
@@ -256,11 +256,29 @@ impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, XUD> + Allocator<N, D>,
 {
+    pub fn new_predict_scratch(&self) -> PredictScratch<N, XUD> {
+        let ud_col_vec_shape = (self.UD.data.shape().1, U1);
+        PredictScratch {
+            d: matrix::as_zeros(ud_col_vec_shape),
+            dv: matrix::as_zeros(ud_col_vec_shape),
+            v: matrix::as_zeros(ud_col_vec_shape),
+        }
+    }
+
+    pub fn new_observe_scratch(&self) -> ObserveScratch<N, D> {
+        let x_vec_shape = self.x.data.shape();
+        ObserveScratch {
+            w: matrix::as_zeros(x_vec_shape),
+            a: matrix::as_zeros(x_vec_shape),
+            b: matrix::as_zeros(x_vec_shape),
+        }
+    }
+
     pub fn predict_use_scratch<QD: Dim>(
         &mut self,
         scratch: &mut PredictScratch<N, XUD>,
-        fx: &MatrixN<N, D>,
         x_pred: &VectorN<N, D>,
+        fx: &MatrixN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
@@ -276,9 +294,9 @@ where
     pub fn observe_innovation_use_scratch<ZD: Dim>(
         &mut self,
         scratch: &mut ObserveScratch<N, D>,
+        s: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,
         noise: &UncorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>
         where
             DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
@@ -307,41 +325,6 @@ where
         Ok(rcondmin)
     }
 
-    pub fn new_predict_scratch(&self) -> PredictScratch<N, XUD> {
-        let ud_col_vec_shape = (self.UD.data.shape().1, U1);
-        PredictScratch {
-            d: matrix::as_zeros(ud_col_vec_shape),
-            dv: matrix::as_zeros(ud_col_vec_shape),
-            v: matrix::as_zeros(ud_col_vec_shape),
-        }
-    }
-
-    pub fn new_observe_scratch(&self) -> ObserveScratch<N, D> {
-        let x_vec_shape = self.x.data.shape();
-        ObserveScratch {
-            w: matrix::as_zeros(x_vec_shape),
-            a: matrix::as_zeros(x_vec_shape),
-            b: matrix::as_zeros(x_vec_shape),
-        }
-    }
-}
-
-impl<N: RealField> UDState<N, Dynamic, Dynamic> {
-    pub fn new_dynamic(state: KalmanState<N, Dynamic>, q_maxsize: usize) -> Self {
-        let x_size = state.x.nrows();
-        UDState {
-            x: state.x,
-            UD: DMatrix::zeros(x_size, x_size + q_maxsize),
-            udu: UDU::new(),
-        }
-    }
-}
-
-impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
-where
-    DefaultAllocator:
-        Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>,
-{
     /// MWG-S prediction from Bierman p.132
     ///
     /// q can have order less then x and a matching G so GqG' has order of x
@@ -361,123 +344,94 @@ where
         let Nq = q.nrows();
         let NN = n + Nq;
 
-        if n > 0
-        // Simplify reverse loop termination
-        {
-            // Augment d with q, UD with G
-            for i in 0..Nq
-            // 0..Nq-1
-            {
-                scratch.d[i + n] = q[i];
+        // Augment d with q, UD with G
+        for i in 0..Nq {
+            scratch.d[i + n] = q[i];
+        }
+        for j in 0..n {
+            for i in 0..Nq {
+                // 0..Nq-1
+                self.UD[(j, i + n)] = G[(j, i)];
             }
-            for j in 0..n
-            // 0..n-1
-            {
-                for i in 0..Nq {
-                    // 0..Nq-1
-                    self.UD[(j, i + n)] = G[(j, i)];
-                }
-            }
+        }
 
-            // U=Fx*U and diagonals retrieved
-            for j in (1..n).rev()
-            // n-1..1
-            {
-                // Prepare d(0)..d(j) as temporary
-                for i in 0..=j {
-                    // 0..j
-                    scratch.d[i] = self.UD[(i, j)];
-                }
-
-                // Lower triangle of UD is implicitly empty
-                for i in 0..n
-                // 0..n-1
-                {
-                    self.UD[(i, j)] = Fx[(i, j)];
-                    for k in 0..j {
-                        // 0..j-1
-                        self.UD[(i, j)] += Fx[(i, k)] * scratch.d[k];
-                    }
-                }
-            }
-            scratch.d[0] = self.UD[(0, 0)];
-
-            //  Complete U = Fx*U
-            for j in 0..n
-            // 0..n-1
-            {
-                self.UD[(j, 0)] = Fx[(j, 0)];
+        // U=Fx*U and diagonals retrieved
+        for j in (1..n).rev() { // n-1..1
+            // Prepare d(0)..d(j) as temporary
+            for i in 0..=j {
+                // 0..j
+                scratch.d[i] = self.UD[(i, j)];
             }
 
-            // The MWG-S algorithm on UD transpose
-            for j in (0..n).rev() {
-                // n-1..0
-                let mut e = self.udu.zero;
-                for k in 0..NN
-                // 0..N-1
-                {
-                    scratch.v[k] = self.UD[(j, k)];
-                    scratch.dv[k] = scratch.d[k] * scratch.v[k];
-                    e += scratch.v[k] * scratch.dv[k];
-                }
-                // Check diagonal element
-                if e > self.udu.zero {
-                    // Positive definite
-                    self.UD[(j, j)] = e;
-
-                    let diaginv = self.udu.one / e;
-                    for k in 0..j
+            // Lower triangle of UD is implicitly empty
+            for i in 0..n {
+                self.UD[(i, j)] = Fx[(i, j)];
+                for k in 0..j {
                     // 0..j-1
-                    {
-                        e = self.udu.zero;
-                        for i in 0..NN {
-                            // 0..N-1
-                            e += self.UD[(k, i)] * scratch.dv[i];
-                        }
-                        e *= diaginv;
-                        self.UD[(j, k)] = e;
+                    self.UD[(i, j)] += Fx[(i, k)] * scratch.d[k];
+                }
+            }
+        }
+        scratch.d[0] = self.UD[(0, 0)];
 
-                        for i in 0..NN {
-                            // 0..N-1
-                            self.UD[(k, i)] -= e * scratch.v[i]
-                        }
+        //  Complete U = Fx*U
+        for j in 0..n {
+            self.UD[(j, 0)] = Fx[(j, 0)];
+        }
+
+        // The MWG-S algorithm on UD transpose
+        for j in (0..n).rev() { // n-1..0
+            let mut e = self.udu.zero;
+            for k in 0..NN {
+                scratch.v[k] = self.UD[(j, k)];
+                scratch.dv[k] = scratch.d[k] * scratch.v[k];
+                e += scratch.v[k] * scratch.dv[k];
+            }
+            // Check diagonal element
+            if e > self.udu.zero {
+                // Positive definite
+                self.UD[(j, j)] = e;
+
+                let diaginv = self.udu.one / e;
+                for k in 0..j {
+                    e = self.udu.zero;
+                    for i in 0..NN {
+                        e += self.UD[(k, i)] * scratch.dv[i];
+                    }
+                    e *= diaginv;
+                    self.UD[(j, k)] = e;
+
+                    for i in 0..NN {
+                        self.UD[(k, i)] -= e * scratch.v[i]
                     }
                 }
-                //PD
-                else if e == self.udu.zero {
-                    // Possibly semi-definite, check not negative
-                    self.UD[(j, j)] = e;
+            }
+            else if e == self.udu.zero {
+                // Possibly semi-definite, check not negative
+                self.UD[(j, j)] = e;
 
-                    // 1 / e is infinite
-                    for k in 0..j
-                    // 0..j-1
-                    {
-                        for i in 0..NN
-                        // 0..N-1
-                        {
-                            e = self.UD[(k, i)] * scratch.dv[i];
-                            if e != self.udu.zero {
-                                return self.udu.minus_one;
-                            }
+                // 1 / e is infinite
+                for k in 0..j {
+                    for i in 0..NN {
+                        e = self.UD[(k, i)] * scratch.dv[i];
+                        if e != self.udu.zero {
+                            return self.udu.minus_one;
                         }
-                        // UD(j,k) unaffected
                     }
+                    // UD(j,k) unaffected
                 }
-                // PD
-                else {
-                    // Negative
-                    return self.udu.minus_one;
-                }
-            } // MWG-S loop
+            }
+            else {
+                // Negative
+                return self.udu.minus_one;
+            }
+        } // MWG-S loop
 
-            // Transpose and Zero lower triangle
-            for j in 1..n
-            // 0..n-1
-            {
-                for i in 0..j {
-                    self.UD[(i, j)] = self.UD[(j, i)];
-                    self.UD[(j, i)] = self.udu.zero; // Zeroing unnecessary as lower only used as a scratch
-                }
+        // Transpose and Zero lower triangle
+        for j in 1..n {
+            for i in 0..j {
+                self.UD[(i, j)] = self.UD[(j, i)];
+                self.UD[(j, i)] = self.udu.zero; // Zeroing unnecessary as lower only used as a scratch
             }
         }
 
@@ -505,12 +459,8 @@ where
         // b(n) is Unweighted Kalman gain
 
         // Compute b = DU'h, a = U'h
-        for j in (1..n).rev()
-        // n-1..1
-        {
-            for k in 0..j
-            // 0..j-1
-            {
+        for j in (1..n).rev() { // n-1..1
+            for k in 0..j {
                 let t = self.UD[(k, j)] * scratch.a[k];
                 scratch.a[j] += t;
             }
@@ -527,7 +477,6 @@ where
         self.UD[(0, 0)] *= r * gamma;
         // Update rest of UD and gain b
         for j in 1..n {
-            // 1..n-1 {
             // d modification
             let alpha_jm1 = *alpha; // alpha at j-1
             *alpha += scratch.b[j] * scratch.a[j];
@@ -538,9 +487,7 @@ where
             gamma = self.udu.one / *alpha;
             self.UD[(j, j)] *= alpha_jm1 * gamma;
             // U modification
-            for i in 0..j
-            // 0..j-1
-            {
+            for i in 0..j {
                 let UD_jm1 = self.UD[(i, j)];
                 self.UD[(i, j)] = UD_jm1 + lamda * scratch.b[i];
                 let t = scratch.b[j] * UD_jm1;
