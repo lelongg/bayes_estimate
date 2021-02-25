@@ -14,6 +14,7 @@ use crate::linalg::cholesky::UDU;
 use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
 use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
+use nalgebra::{DimAdd, DimSum};
 
 /// UD State representation.
 ///
@@ -22,31 +23,27 @@ use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 ///
 /// The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and d is a diagonal vector.
 /// U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
-pub struct UDState<N: RealField, D: Dim, XUD: Dim>
+pub struct UDState<N: RealField, D: Dim>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// State vector
     pub x: VectorN<N, D>,
     /// UD matrix representation of state covariance
-    pub UD: MatrixMN<N, D, XUD>,
+    pub UD: MatrixN<N, D>,
     // UDU instance for factorisations
     udu: UDU<N>,
 }
 
-impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
+impl<N: RealField, D: Dim> UDState<N, D>
 where
     DefaultAllocator:
-        Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>,
+        Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Create a UDState for given state dimensions.
     ///
     /// D is the size of states vector and rows in UD.
-    ///
-    /// XUD is the number of columns in UD. This will be large then d to accommodate the matrix
-    /// dimensions of the prediction model. The extra columns are used for the prediction computation.
-    pub fn new(UD: MatrixMN<N, D, XUD>, x: VectorN<N, D>) -> Self {
-        assert!(UD.ncols() >= UD.nrows(), "UD cols must be >= UD rows");
+    pub fn new(UD: MatrixN<N, D>, x: VectorN<N, D>) -> Self {
         assert!(x.nrows() == UD.nrows(), "x rows must be == UD rows");
 
         UDState {
@@ -59,13 +56,9 @@ where
     /// Create a UDState for given state dimensions.
     ///
     /// d is the size of states vector and rows in UD.
-    /// xud is the number of columns in UD. This will be large then d to accommodate the matrix
-    /// dimensions of the prediction model. The extra columns are used for the prediction computation.
-    pub fn new_zero(d: D, xud: XUD) -> Self {
-        assert!(xud.value() >= d.value(), "xud must be >= d");
-
+    pub fn new_zero(d: D) -> Self {
         UDState {
-            UD: MatrixMN::<N, D, XUD>::zeros_generic(d, xud),
+            UD: MatrixN::<N, D>::zeros_generic(d, d),
             x: VectorN::zeros_generic(d, U1),
             udu: UDU::new(),
         }
@@ -78,9 +71,10 @@ where
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, DimSum<D, QD>, U1> + Allocator<N, D, QD> + Allocator<N, QD>
     {
-        let mut scratch = self.new_predict_scratch();
+        let mut scratch = self.new_predict_scratch(noise.q.data.shape().0);
         self.predict_use_scratch(&mut scratch, x_pred, fx, noise)
     }
 
@@ -108,18 +102,18 @@ where
 
 }
 
-impl<N: RealField, D: Dim, XUD: Dim> Estimator<N, D> for UDState<N, D, XUD>
+impl<N: RealField, D: Dim> Estimator<N, D> for UDState<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         KalmanEstimator::kalman_state(self).map(|r| r.1.x)
     }
 }
 
-impl<N: RealField, D: Dim, XUD: Dim> KalmanEstimator<N, D> for UDState<N, D, XUD>
+impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D>,
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Initialise the UDState with a KalmanState.
     ///
@@ -156,10 +150,9 @@ where
     }
 }
 
-impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
+impl<N: RealField, D: Dim> UDState<N, D>
 where
-    DefaultAllocator:
-        Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, D> + Allocator<N, XUD>,
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Special Linear Hx observe for correlated factorised noise.
     ///
@@ -231,13 +224,15 @@ where
 /// Prediction Scratch.
 ///
 /// Provides temporary variables for prediction calculation.
-pub struct PredictScratch<N: RealField, XUD: Dim>
+pub struct PredictScratch<N: RealField, D: Dim, QD: Dim>
     where
-        DefaultAllocator: Allocator<N, XUD>,
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
 {
-    pub d: VectorN<N, XUD>,
-    pub dv: VectorN<N, XUD>,
-    pub v: VectorN<N, XUD>,
+    pub G: MatrixMN<N, D, QD>,
+    pub d: VectorN<N, DimSum<D, QD>>,
+    pub dv: VectorN<N, DimSum<D, QD>>,
+    pub v: VectorN<N, DimSum<D, QD>>,
 }
 
 /// Observe Scratch.
@@ -252,13 +247,18 @@ pub struct ObserveScratch<N: RealField, D: Dim>
     pub b: VectorN<N, D>,
 }
 
-impl<N: RealField, D: Dim, XUD: Dim> UDState<N, D, XUD>
+impl<N: RealField, D: Dim> UDState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, XUD> + Allocator<N, XUD> + Allocator<N, D>,
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new_predict_scratch(&self) -> PredictScratch<N, XUD> {
-        let ud_col_vec_shape = (self.UD.data.shape().1, U1);
+    pub fn new_predict_scratch<QD :Dim>(&self, qd: QD) -> PredictScratch<N, D, QD>
+    where
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>
+    {
+        let ud_col_vec_shape = (self.UD.data.shape().1.add(qd), U1);
         PredictScratch {
+            G: matrix::as_zeros((self.UD.data.shape().0, qd)),
             d: matrix::as_zeros(ud_col_vec_shape),
             dv: matrix::as_zeros(ud_col_vec_shape),
             v: matrix::as_zeros(ud_col_vec_shape),
@@ -276,12 +276,14 @@ where
 
     pub fn predict_use_scratch<QD: Dim>(
         &mut self,
-        scratch: &mut PredictScratch<N, XUD>,
+        scratch: &mut PredictScratch<N, D, QD>,
         x_pred: &VectorN<N, D>,
         fx: &MatrixN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
             DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
     {
         self.x = x_pred.clone();
@@ -289,6 +291,134 @@ where
         // Predict UD from model
         let rcond = UDState::predictGq(self, scratch, &fx, &noise.G, &noise.q);
         matrix::check_non_negativ(rcond, "X not PSD")
+    }
+
+    /// MWG-S prediction from Bierman p.132
+    ///
+    /// q can have order less then x and a matching G so GqG' has order of x
+    ///
+    /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
+    fn predictGq<QD: Dim>(
+        &mut self,
+        scratch: &mut PredictScratch<N, D, QD>,
+        Fx: &MatrixN<N, D>,
+        G: &MatrixMN<N, D, QD>,
+        q: &VectorN<N, QD>,
+    ) -> N
+        where
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
+            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
+    {
+        let n = self.x.nrows();
+        let Nq = q.nrows();
+        let NN = n + Nq;
+
+        // Augment d with q, UD with G
+        for i in 0..Nq {
+            scratch.d[i + n] = q[i];
+        }
+        for j in 0..n {
+            for i in 0..Nq {
+                scratch.G[(j, i)] = G[(j, i)];
+            }
+        }
+
+        // U=Fx*U and diagonals retrieved
+        for j in (1..n).rev() { // n-1..1
+            // Prepare d as temporary
+            for i in 0..=j { // 0..j
+                scratch.d[i] = self.UD[(i, j)];
+            }
+
+            // Lower triangle of UD is implicitly empty
+            for i in 0..n {
+                self.UD[(i, j)] = Fx[(i, j)];
+                for k in 0..j {
+                    self.UD[(i, j)] += Fx[(i, k)] * scratch.d[k];
+                }
+            }
+        }
+        scratch.d[0] = self.UD[(0, 0)];
+
+        // Complete U = Fx*U
+        for j in 0..n {
+            self.UD[(j, 0)] = Fx[(j, 0)];
+        }
+
+        // The MWG-S algorithm on UD transpose
+        for j in (0..n).rev() { // n-1..0
+            let mut e = self.udu.zero;
+            for k in 0..n {
+                scratch.v[k] = self.UD[(j, k)];
+                scratch.dv[k] = scratch.d[k] * scratch.v[k];
+                e += scratch.v[k] * scratch.dv[k];
+            }
+            for k in n..NN {
+                scratch.v[k] = scratch.G[(j, k-n)];
+                scratch.dv[k] = scratch.d[k] * scratch.v[k];
+                e += scratch.v[k] * scratch.dv[k];
+            }
+            // Check diagonal element
+            if e > self.udu.zero {
+                // Positive definite
+                self.UD[(j, j)] = e;
+
+                let diaginv = self.udu.one / e;
+                for k in 0..j {
+                    e = self.udu.zero;
+                    for i in 0..n {
+                        e += self.UD[(k, i)] * scratch.dv[i];
+                    }
+                    for i in n..NN {
+                        e += scratch.G[(k, i-n)] * scratch.dv[i];
+                    }
+                    e *= diaginv;
+                    self.UD[(j, k)] = e;
+
+                    for i in 0..n {
+                        self.UD[(k, i)] -= e * scratch.v[i]
+                    }
+                    for i in n..NN {
+                        scratch.G[(k, i-n)] -= e * scratch.v[i]
+                    }
+                }
+            } else if e == self.udu.zero {
+                // Possibly semi-definite, check not negative
+                self.UD[(j, j)] = e;
+
+                // 1 / e is infinite
+                for k in 0..j {
+                    for i in 0..n {
+                        e = self.UD[(k, i)] * scratch.dv[i];
+                        if e != self.udu.zero {
+                            return self.udu.minus_one;
+                        }
+                    }
+                    for i in n..NN {
+                        e = scratch.G[(k, i-n)] * scratch.dv[i];
+                        if e != self.udu.zero {
+                            return self.udu.minus_one;
+                        }
+                    }
+                    // UD(j,k) unaffected
+                }
+            } else {
+                // Negative
+                return self.udu.minus_one;
+            }
+        } // MWG-S loop
+
+        // Transpose and Zero lower triangle
+        for j in 1..n {
+            for i in 0..j {
+                self.UD[(i, j)] = self.UD[(j, i)];
+                self.UD[(j, i)] = self.udu.zero; // Zeroing unnecessary as lower only used as a scratch
+            }
+        }
+
+        // Estimate the reciprocal condition number from upper triangular part
+        UDU::UdUrcond(&self.UD)
     }
 
     pub fn observe_innovation_use_scratch<ZD: Dim>(
@@ -323,120 +453,6 @@ where
             self.x += &scratch.w;
         }
         Ok(rcondmin)
-    }
-
-    /// MWG-S prediction from Bierman p.132
-    ///
-    /// q can have order less then x and a matching G so GqG' has order of x
-    ///
-    /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
-    fn predictGq<UD: Dim>(
-        &mut self,
-        scratch: &mut PredictScratch<N, XUD>,
-        Fx: &MatrixN<N, D>,
-        G: &MatrixMN<N, D, UD>,
-        q: &VectorN<N, UD>,
-    ) -> N
-    where
-        DefaultAllocator: Allocator<N, D, UD> + Allocator<N, UD>,
-    {
-        let n = self.x.nrows();
-        let Nq = q.nrows();
-        let NN = n + Nq;
-
-        // Augment d with q, UD with G
-        for i in 0..Nq {
-            scratch.d[i + n] = q[i];
-        }
-        for j in 0..n {
-            for i in 0..Nq {
-                // 0..Nq-1
-                self.UD[(j, i + n)] = G[(j, i)];
-            }
-        }
-
-        // U=Fx*U and diagonals retrieved
-        for j in (1..n).rev() { // n-1..1
-            // Prepare d(0)..d(j) as temporary
-            for i in 0..=j {
-                // 0..j
-                scratch.d[i] = self.UD[(i, j)];
-            }
-
-            // Lower triangle of UD is implicitly empty
-            for i in 0..n {
-                self.UD[(i, j)] = Fx[(i, j)];
-                for k in 0..j {
-                    // 0..j-1
-                    self.UD[(i, j)] += Fx[(i, k)] * scratch.d[k];
-                }
-            }
-        }
-        scratch.d[0] = self.UD[(0, 0)];
-
-        //  Complete U = Fx*U
-        for j in 0..n {
-            self.UD[(j, 0)] = Fx[(j, 0)];
-        }
-
-        // The MWG-S algorithm on UD transpose
-        for j in (0..n).rev() { // n-1..0
-            let mut e = self.udu.zero;
-            for k in 0..NN {
-                scratch.v[k] = self.UD[(j, k)];
-                scratch.dv[k] = scratch.d[k] * scratch.v[k];
-                e += scratch.v[k] * scratch.dv[k];
-            }
-            // Check diagonal element
-            if e > self.udu.zero {
-                // Positive definite
-                self.UD[(j, j)] = e;
-
-                let diaginv = self.udu.one / e;
-                for k in 0..j {
-                    e = self.udu.zero;
-                    for i in 0..NN {
-                        e += self.UD[(k, i)] * scratch.dv[i];
-                    }
-                    e *= diaginv;
-                    self.UD[(j, k)] = e;
-
-                    for i in 0..NN {
-                        self.UD[(k, i)] -= e * scratch.v[i]
-                    }
-                }
-            }
-            else if e == self.udu.zero {
-                // Possibly semi-definite, check not negative
-                self.UD[(j, j)] = e;
-
-                // 1 / e is infinite
-                for k in 0..j {
-                    for i in 0..NN {
-                        e = self.UD[(k, i)] * scratch.dv[i];
-                        if e != self.udu.zero {
-                            return self.udu.minus_one;
-                        }
-                    }
-                    // UD(j,k) unaffected
-                }
-            }
-            else {
-                // Negative
-                return self.udu.minus_one;
-            }
-        } // MWG-S loop
-
-        // Transpose and Zero lower triangle
-        for j in 1..n {
-            for i in 0..j {
-                self.UD[(i, j)] = self.UD[(j, i)];
-                self.UD[(j, i)] = self.udu.zero; // Zeroing unnecessary as lower only used as a scratch
-            }
-        }
-
-        // Estimate the reciprocal condition number from upper triangular part
-        UDU::UdUrcond(&self.UD)
     }
 
     /// Linear UD factorisation update from Bierman p.100

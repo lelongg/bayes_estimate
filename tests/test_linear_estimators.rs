@@ -53,7 +53,7 @@ fn test_information_u2() {
 
 #[test]
 fn test_ud_u2() {
-    test_estimator(&mut UDState::new_zero(U2, U2.add(U1)));
+    test_estimator(&mut UDState::new_zero(U2));
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn test_information_dynamic() {
 
 #[test]
 fn test_ud_dynamic() {
-    test_estimator(&mut UDState::new_zero(Dynamic::new(2), Dynamic::new(3)));
+    test_estimator(&mut UDState::new_zero(Dynamic::new(2)));
 }
 
 #[test]
@@ -203,9 +203,10 @@ where
 }
 
 /// Test UD estimator operations defined on a UDState.
-impl<D: DimAdd<U1>> TestEstimator<D> for UDState<f64, D, DimSum<D, U1>>
+impl<D: DimAdd<U1>> TestEstimator<D> for UDState<f64, D>
 where
-    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f64, D, DimSum<D, U1>> + Allocator<f64, DimSum<D, U1>> + Allocator<usize, D, DimSum<D, U1>>,
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f64, D, DimSum<D, U1>> + Allocator<f64, DimSum<D, U1>>
+    + Allocator<usize, D, D>,
 {
     fn trace_state(&self) {
         println!("{}", self.UD);
