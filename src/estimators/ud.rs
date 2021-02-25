@@ -164,14 +164,14 @@ where
     /// Special Linear Hx observe for correlated factorised noise.
     ///
     /// Applies observations sequentially in the order they appear in z
-    /// Creates temporary Vec and Matrix to decorrelate z,Z
     ///
     /// Return: Minimum rcond of all sequential observe
     pub fn observe_correlated<ZD: Dim>(
         &mut self,
-        hx: &MatrixMN<N, ZD, D>,
-        noise_factor: &CorrelatedFactorNoise<N, ZD>,
         z: &VectorN<N, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
+        h_normalize: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
+        noise_factor: &CorrelatedFactorNoise<N, ZD>,
     ) -> Result<N, &'static str>
     where
         DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD>
@@ -182,6 +182,7 @@ where
         let mut scratch = self.new_observe_scratch();
 
         let mut zp = hx * &self.x;
+        h_normalize(&mut zp, z);
         let mut zpdecol = zp.clone();
 
         // Observation prediction and normalised observation

@@ -120,8 +120,9 @@ pub trait FunctionObserver<N: SimdRealField, D: Dim, ZD: Dim>
 {
     fn observe_innovation(
         &mut self,
-        h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>,
-        noise: &CorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>)
+        z: &VectorN<N, ZD>,
+        h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+        h_normalize: fn(&mut VectorN<N, D>, VectorN<N, D>),
+        noise: &CorrelatedNoise<N, ZD>)
         -> Result<(), &'static str>;
 }

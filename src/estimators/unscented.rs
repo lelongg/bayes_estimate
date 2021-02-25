@@ -44,7 +44,13 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
         Ok(())
     }
 
-    pub fn observe_unscented<ZD: Dim>(&mut self, h: fn(&VectorN<N, D>, &VectorN<N, D>) -> VectorN<N, ZD>, noise: &CorrelatedNoise<N, ZD>, s: &VectorN<N, ZD>, kappa: N) -> Result<(), &'static str>
+    pub fn observe_unscented<ZD: Dim>(
+        &mut self,
+        h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+        h_normalise: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
+        noise: &CorrelatedNoise<N, ZD>, s:
+        &VectorN<N, ZD>, kappa: N)
+        -> Result<(), &'static str>
         where
             DefaultAllocator: Allocator<N, D, ZD> + Allocator<N, ZD, ZD> + Allocator<N, U1, ZD> + Allocator<N, ZD>
     {
@@ -55,12 +61,14 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
         // Predict points of ZZ using supplied observation model
         let usize = UU.len();
         let mut ZZ: Vec<VectorN<N, ZD>> = Vec::with_capacity(usize);
-        let xm = &self.x;
-        for i in 0..usize {
-            ZZ.push(h(&UU[i], xm))
+        ZZ.push(h(&UU[0]));
+        for i in 1..usize {
+            let mut zi = h(&UU[i]);
+            h_normalise(&mut zi, &ZZ[0]);
+            ZZ.push(zi);
         }
 
-        // Mean and covarnaic of observation distribution
+        // Mean and covariance of observation distribution
         let mut zZ = KalmanState::<N, ZD>::new_zero(s.data.shape().0);
         kalman(&mut zZ, &ZZ, kappa);
         for i in 0..usize {
@@ -126,7 +134,7 @@ pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Resu
         UU.push(&xX.x - &sigmaCol);
     }
 
-    Ok((UU,rcond))
+    Ok((UU, rcond))
 }
 
 pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<VectorN<N, D>>, scale: N)
@@ -136,7 +144,7 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<Vect
     let two = N::from_u32(2).unwrap();
     let half = N::one() / two;
 
-    let x_scale = N::from_usize((XX.len()-1)/2).unwrap() + scale;
+    let x_scale = N::from_usize((XX.len() - 1) / 2).unwrap() + scale;
     // Mean of predicted distribution: x
     state.x = &XX[0] * scale;
     for i in 1..XX.len() {
