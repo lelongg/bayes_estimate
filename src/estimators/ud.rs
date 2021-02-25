@@ -283,8 +283,7 @@ where
     ) -> Result<N, &'static str>
         where
             D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
+            DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
         self.x = x_pred.clone();
 
@@ -293,9 +292,41 @@ where
         matrix::check_non_negativ(rcond, "X not PSD")
     }
 
+    pub fn observe_innovation_use_scratch<ZD: Dim>(
+        &mut self,
+        scratch: &mut ObserveScratch<N, D>,
+        s: &VectorN<N, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
+        noise: &UncorrelatedNoise<N, ZD>,
+    ) -> Result<N, &'static str>
+        where
+            DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
+    {
+        let z_size = s.nrows();
+
+        // Apply observations sequentially as they are decorrelated
+        let mut rcondmin = N::max_value();
+
+        for o in 0..z_size {
+            // Check noise precondition
+            if noise.q[o] < self.udu.zero {
+                return Err("Zv not PSD in observe");
+            }
+            // Update UD and extract gain
+            let mut S = self.udu.zero;
+            hx.row(o).transpose_to(&mut scratch.a);
+            let rcond = UDState::observeUD(self, scratch, &mut S, noise.q[o]);
+            if rcond < rcondmin {
+                rcondmin = rcond;
+            }
+            // State update using normalised non-linear innovation
+            scratch.w *= s[0];
+            self.x += &scratch.w;
+        }
+        Ok(rcondmin)
+    }
+
     /// MWG-S prediction from Bierman p.132
-    ///
-    /// q can have order less then x and a matching G so GqG' has order of x
     ///
     /// Return: reciprocal condition number, -1 if negative, 0 if semi-definite (including zero)
     fn predictGq<QD: Dim>(
@@ -307,8 +338,7 @@ where
     ) -> N
         where
             D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
+            DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
         let n = self.x.nrows();
         let Nq = q.nrows();
@@ -339,7 +369,9 @@ where
                 }
             }
         }
-        scratch.d[0] = self.UD[(0, 0)];
+        if n > 0 {
+            scratch.d[0] = self.UD[(0, 0)];
+        }
 
         // Complete U = Fx*U
         for j in 0..n {
@@ -421,40 +453,6 @@ where
         UDU::UdUrcond(&self.UD)
     }
 
-    pub fn observe_innovation_use_scratch<ZD: Dim>(
-        &mut self,
-        scratch: &mut ObserveScratch<N, D>,
-        s: &VectorN<N, ZD>,
-        hx: &MatrixMN<N, ZD, D>,
-        noise: &UncorrelatedNoise<N, ZD>,
-    ) -> Result<N, &'static str>
-        where
-            DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
-    {
-        let z_size = s.nrows();
-
-        // Apply observations sequentially as they are decorrelated
-        let mut rcondmin = N::max_value();
-
-        for o in 0..z_size {
-            // Check noise precondition
-            if noise.q[o] < self.udu.zero {
-                return Err("Zv not PSD in observe");
-            }
-            // Update UD and extract gain
-            let mut S = self.udu.zero;
-            hx.row(o).transpose_to(&mut scratch.a);
-            let rcond = UDState::observeUD(self, scratch, &mut S, noise.q[o]);
-            if rcond < rcondmin {
-                rcondmin = rcond;
-            }
-            // State update using normalised non-linear innovation
-            scratch.w *= s[0];
-            self.x += &scratch.w;
-        }
-        Ok(rcondmin)
-    }
-
     /// Linear UD factorisation update from Bierman p.100
     ///
     /// # Input
@@ -469,7 +467,7 @@ where
     ///  r is PSD (not checked)
     /// # Return
     ///  reciprocal condition number of UD, -1 if alpha singular (negative or zero)
-    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, r: N) -> N {
+    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, q: N) -> N {
         let n = self.UD.nrows();
         // a(n) is U'a
         // b(n) is Unweighted Kalman gain
@@ -485,12 +483,12 @@ where
         scratch.b[0] = self.UD[(0, 0)] * scratch.a[0];
 
         // Update UD(0,0), d(0) modification
-        *alpha = r + scratch.b[0] * scratch.a[0];
+        *alpha = q + scratch.b[0] * scratch.a[0];
         if *alpha <= self.udu.zero {
             return self.udu.minus_one;
         }
         let mut gamma = self.udu.one / *alpha;
-        self.UD[(0, 0)] *= r * gamma;
+        self.UD[(0, 0)] *= q * gamma;
         // Update rest of UD and gain b
         for j in 1..n {
             // d modification
