@@ -36,9 +36,8 @@ pub struct UDState<N: RealField, D: Dim>
 }
 
 impl<N: RealField, D: Dim> UDState<N, D>
-where
-    DefaultAllocator:
-        Allocator<N, D, D> + Allocator<N, D>,
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Create a UDState for given state dimensions.
     ///
@@ -91,15 +90,14 @@ where
         noise: &UncorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>
-    where
-        DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
+        where
+            DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
     {
         let mut scratch = self.new_observe_scratch();
 
         // Predict UD from model
         UDState::observe_innovation_use_scratch(self, &mut scratch, s, hx, noise)
     }
-
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for UDState<N, D>
@@ -112,8 +110,8 @@ impl<N: RealField, D: Dim> Estimator<N, D> for UDState<N, D>
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
-where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Initialise the UDState with a KalmanState.
     ///
@@ -151,8 +149,8 @@ where
 }
 
 impl<N: RealField, D: Dim> UDState<N, D>
-where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Special Linear Hx observe for correlated factorised noise.
     ///
@@ -166,8 +164,8 @@ where
         h_normalize: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
         noise_factor: &CorrelatedFactorNoise<N, ZD>,
     ) -> Result<N, &'static str>
-    where
-        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD>
+        where
+            DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD>
     {
         let x_size = self.x.nrows();
         let z_size = z.nrows();
@@ -248,13 +246,13 @@ pub struct ObserveScratch<N: RealField, D: Dim>
 }
 
 impl<N: RealField, D: Dim> UDState<N, D>
-where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
-{
-    pub fn new_predict_scratch<QD :Dim>(&self, qd: QD) -> PredictScratch<N, D, QD>
     where
-        D: DimAdd<QD>,
-        DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+{
+    pub fn new_predict_scratch<QD: Dim>(&self, qd: QD) -> PredictScratch<N, D, QD>
+        where
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>
     {
         let ud_col_vec_shape = (self.UD.data.shape().1.add(qd), U1);
         PredictScratch {
@@ -387,7 +385,7 @@ where
                 e += scratch.v[k] * scratch.dv[k];
             }
             for k in n..NN {
-                scratch.v[k] = scratch.G[(j, k-n)];
+                scratch.v[k] = scratch.G[(j, k - n)];
                 scratch.dv[k] = scratch.d[k] * scratch.v[k];
                 e += scratch.v[k] * scratch.dv[k];
             }
@@ -403,7 +401,7 @@ where
                         e += self.UD[(k, i)] * scratch.dv[i];
                     }
                     for i in n..NN {
-                        e += scratch.G[(k, i-n)] * scratch.dv[i];
+                        e += scratch.G[(k, i - n)] * scratch.dv[i];
                     }
                     e *= diaginv;
                     self.UD[(j, k)] = e;
@@ -412,7 +410,7 @@ where
                         self.UD[(k, i)] -= e * scratch.v[i]
                     }
                     for i in n..NN {
-                        scratch.G[(k, i-n)] -= e * scratch.v[i]
+                        scratch.G[(k, i - n)] -= e * scratch.v[i]
                     }
                 }
             } else if e == self.udu.zero {
@@ -428,7 +426,7 @@ where
                         }
                     }
                     for i in n..NN {
-                        e = scratch.G[(k, i-n)] * scratch.dv[i];
+                        e = scratch.G[(k, i - n)] * scratch.dv[i];
                         if e != self.udu.zero {
                             return self.udu.minus_one;
                         }
@@ -467,7 +465,8 @@ where
     ///  r is PSD (not checked)
     /// # Return
     ///  reciprocal condition number of UD, -1 if alpha singular (negative or zero)
-    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, q: N) -> N {
+    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, q: N)
+                 -> N {
         let n = self.UD.nrows();
         // a(n) is U'a
         // b(n) is Unweighted Kalman gain
