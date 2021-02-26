@@ -11,7 +11,7 @@
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
 
-use crate::linalg::cholesky;
+use crate::linalg::rcond;
 use crate::matrix::{check_non_negativ};
 use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise};
@@ -45,7 +45,7 @@ where
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         self.x = state.x.clone();
         self.X = state.X.clone();
-        let rcond = cholesky::UDU::UdUrcond(&self.X);
+        let rcond = rcond::rcond_symetric(&self.X);
         check_non_negativ(rcond, "X not PSD")?;
 
         Ok(rcond)

@@ -424,7 +424,7 @@ where
 
     approx::assert_abs_diff_eq!(state.X[(0,0)], 0.000000, epsilon = 0.000001);
     approx::assert_abs_diff_eq!(state.X[(0,1)], 0.000049, epsilon = 0.000001);
-    approx::assert_abs_diff_eq!(state.X[(1,1)], 0.014701, epsilon = 0.000003);
+    approx::assert_abs_diff_eq!(state.X[(1,1)], 0.014703, epsilon = 0.000003);
 }
 
 /// Create a Dynamic or Static copy.

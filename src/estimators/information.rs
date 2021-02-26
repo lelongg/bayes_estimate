@@ -14,7 +14,7 @@
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, MatrixMN, MatrixN, RealField, VectorN};
 
-use crate::linalg::cholesky::UDU;
+use crate::linalg::rcond;
 use crate::matrix::{check_positive};
 use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
@@ -46,24 +46,20 @@ where
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
         // Information
-        self.I = state.X.clone();
-        let rcond = UDU::new().UdUinversePD(&mut self.I);
-        check_positive(rcond, "X not PD")?;
+        self.I = state.X.clone().cholesky().ok_or("X not PD")?.inverse();
         // Information state
         self.i = &self.I * &state.x;
 
-        Ok(rcond)
+        Ok(rcond::rcond_symetric(&state.X))
     }
 
     fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
         // Covariance
-        let mut X = self.I.clone();
-        let rcond = UDU::new().UdUinversePD(&mut X);
-        check_positive(rcond, "Y not PD")?;
+        let X = self.I.clone().cholesky().ok_or("Y not PD")?.inverse();
         // State
         let x = &X * &self.i;
 
-        Ok((rcond, KalmanState { x, X }))
+        Ok((rcond::rcond_symetric(&self.I), KalmanState { x, X }))
     }
 }
 
@@ -125,7 +121,8 @@ where
         }
 
         // invert B ,additive noise
-        let rcond = UDU::new().UdUinversePDignoreInfinity(&mut B);
+        B = B.cholesky().ok_or("B not PD")?.inverse();
+        let rcond = rcond::rcond_symetric(&B);
         check_positive(rcond, "(G'invFx'.I.inv(Fx).G + inv(Q)) not PD")?;
 
         // G*invB*G' ,in state space

@@ -16,8 +16,7 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN, st
 
 use crate::models::KalmanState;
 use crate::noise::{CorrelatedNoise};
-use crate::matrix::{check_non_negativ};
-use crate::linalg::cholesky::UDU;
+use crate::linalg::rcond;
 
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -117,12 +116,7 @@ pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Resu
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    let udu = UDU::new();
-    let mut sigma = xX.X.clone();
-    let rcond = udu.UCfactor_n(&mut sigma, xX.x.nrows());
-
-    check_non_negativ(rcond, "Unscented X not PSD")?;
-    sigma *= scale.simd_sqrt();
+    let sigma = xX.X.clone().cholesky().ok_or("unscented X not PSD")?.l() * scale.simd_sqrt();
 
     // Generate UU with the same sample Mean and Covariance
     let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(2 * xX.x.nrows() + 1);
@@ -134,7 +128,7 @@ pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Resu
         UU.push(&xX.x - &sigmaCol);
     }
 
-    Ok((UU, rcond))
+    Ok((UU, rcond::rcond_symetric(&xX.X)))
 }
 
 pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<VectorN<N, D>>, scale: N)
