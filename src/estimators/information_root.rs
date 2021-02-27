@@ -111,6 +111,33 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
     }
 }
 
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for InformationRootState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
+        D: DimAdd<ZD> + DimAdd<U1>,
+        DefaultAllocator: Allocator<N, DimSum<D, ZD>, DimSum<D, U1>> + Allocator<N, DimSum<D, ZD>>,
+        DimSum<D, ZD>: DimMin<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>> + Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>, DimSum<D, U1>>
+{
+    fn observe_innovation(
+        &mut self,
+        s: &VectorN<N, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
+        noise: &CorrelatedNoise<N, ZD>,
+    ) -> Result<(), &'static str>
+    {
+        let udu = UDU::new();
+        let mut QI = noise.Q.clone();
+        let rcond = udu.UCfactor_n(&mut QI, s.nrows());
+        check_positive(rcond, "Q not PD")?;
+        let singular = udu.UTinverse(&mut QI);
+        assert!(!singular, "singular QI");   // unexpected check_positive should prevent singular
+
+        let x = self.state()?;
+        self.observe_info(&(s + hx * x), hx, &QI)
+    }
+}
+
 impl<N: RealField, D: Dim> InformationRootState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
@@ -219,32 +246,5 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
         copy_from(&mut self.r, &r.slice((0, x_size), (x_size,1)));
 
         Result::Ok(())
-    }
-}
-
-impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for InformationRootState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
-        D: DimAdd<ZD> + DimAdd<U1>,
-        DefaultAllocator: Allocator<N, DimSum<D, ZD>, DimSum<D, U1>> + Allocator<N, DimSum<D, ZD>>,
-        DimSum<D, ZD>: DimMin<DimSum<D, U1>>,
-        DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>> + Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>, DimSum<D, U1>>
-{
-    fn observe_innovation(
-        &mut self,
-        s: &VectorN<N, ZD>,
-        hx: &MatrixMN<N, ZD, D>,
-        noise: &CorrelatedNoise<N, ZD>,
-    ) -> Result<(), &'static str>
-    {
-        let udu = UDU::new();
-        let mut QI = noise.Q.clone();
-        let rcond = udu.UCfactor_n(&mut QI, s.nrows());
-        check_positive(rcond, "Q not PD")?;
-        let singular = udu.UTinverse(&mut QI);
-        assert!(!singular, "singular QI");   // unexpected check_positive should prevent singular
-
-        let x = self.state()?;
-        self.observe_info(&(s + hx * x), hx, &QI)
     }
 }

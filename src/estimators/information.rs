@@ -16,7 +16,7 @@ use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, Matr
 
 use crate::linalg::rcond;
 use crate::matrix::{check_positive};
-use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator};
+use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator, ExtendedLinearObserver};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -81,6 +81,26 @@ where
         X += &noise.Q;
 
         self.init(&KalmanState { x: x_pred.clone_owned(), X })?;
+
+        return Ok(())
+    }
+}
+
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for InformationState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
+{
+    fn observe_innovation(
+        &mut self,
+        s: &VectorN<N, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
+        noise: &CorrelatedNoise<N, ZD>,
+    ) -> Result<(), &'static str>
+    {
+        let x = self.state().unwrap();
+        let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
+        let info = self.observe_info(hx, &noise_inv, &(s + hx * x));
+        self.add_information(&info);
 
         return Ok(())
     }

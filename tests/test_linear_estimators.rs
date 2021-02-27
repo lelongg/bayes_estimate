@@ -198,17 +198,14 @@ where
     fn observe(
         &mut self,
         s: &Vector1<f64>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        let x = self.state().unwrap();
-        let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
-        let info = self.observe_info(hx, &noise_inv, &(s + h(&x)));
-        self.add_information(&info);
+        ExtendedLinearObserver::observe_innovation(self, s, hx, noise)?;
         Ok(())
     }
 }
