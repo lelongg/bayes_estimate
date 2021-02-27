@@ -7,15 +7,16 @@
 //! The linear representation can also be used for non-linear systems by using linearised models.
 
 use nalgebra as na;
-use na::{allocator::Allocator, DefaultAllocator, DMatrix, MatrixMN, MatrixN, RealField, VectorN, QR};
-use na::{SimdRealField, Dim, DimName, Dynamic, U1};
+use na::{allocator::Allocator, DefaultAllocator, MatrixMN, MatrixN, RealField, VectorN, QR};
+use na::{SimdRealField, Dim, U1};
+use na::{DimAdd, DimSum, DimMinimum, DimMin};
 use na::storage::Storage;
 
 use crate::linalg::cholesky::UDU;
-use crate::models::{KalmanState, InformationState, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver, Estimator};
+use crate::models::{KalmanState, InformationState, KalmanEstimator, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 use crate::linalg::cholesky;
-use crate::matrix::check_positive;
+use crate::matrix::{check_positive, copy_from};
 
 /// Information State.
 ///
@@ -166,7 +167,10 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
-            DefaultAllocator: Allocator<N, QD> + Allocator<N, D, QD>
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, DimSum<D, QD>, DimSum<D, QD>> + Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
+            DimSum<D, QD>: DimMin<DimSum<D, QD>>,
+            DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>> + Allocator<N, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>, DimSum<D, QD>>,
     {
         // Require Root of correlated predict noise (may be semidefinite)
         let mut Gqr = noise.G.clone();
@@ -182,35 +186,37 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         // Form Augmented matrix for factorisation
         let x_size = x_pred.nrows();
         let q_size = noise.q.nrows();
-        let RFxI: MatrixMN<N, D, D> = &self.R * &pred_inv;
+        let RFxI: MatrixMN<N, D, D> = &self.R * fx_inv;
 
-        let mut A = DMatrix::<N>::identity(q_size + x_size, q_size + x_size); // Prefill with identity for top left and zero's in off diagonals
+        let dqd = noise.G.data.shape().0.add(noise.q.data.shape().0);
+        let mut A = MatrixMN::identity_generic(dqd, dqd); // Prefill with identity for top left and zero's in off diagonals
         let x: MatrixMN<N, D, QD> = &RFxI * &Gqr;
-        A.slice_mut((q_size, 0), (x_size, q_size)).copy_from(&x);
-        A.slice_mut((q_size, q_size), (x_size, x_size)).copy_from(&RFxI);
+        copy_from(&mut A.slice_mut((q_size, 0), (x_size, q_size)), &x);
+        copy_from(&mut A.slice_mut((q_size, q_size), (x_size, x_size)), &RFxI);
 
         // Calculate factorisation so we have and upper triangular R
         let qr = QR::new(A);
-        // Extract the roots, junk in strict lower triangle
-        let qri = qr.qr_internal();
-        let res = qri.slice((q_size, q_size), (x_size, x_size)).upper_triangle();
-        self.R.copy_from(&res);
+        // Extract the roots
+        let r = qr.r();
+        copy_from(&mut self.R, &r.slice((q_size, q_size), (x_size, x_size)));
 
         self.r = &self.R * &x_pred;    // compute r from x_pred
 
         return Result::Ok(UDU::new().UCrcond(&self.R));    // compute rcond of result
     }
 
-    pub fn observe_info<ZD: DimName>(
+    pub fn observe_info<ZD: Dim>(
         &mut self,
+        z: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,
         noise_inv: &MatrixN<N, ZD>, // Inverse of correlated noise model
-        z: &VectorN<N, ZD>,
     ) -> Result<(), &'static str>
         where
-            DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD>
-            + Allocator<N, D, Dynamic> + Allocator<N, ZD, Dynamic>
-            + Allocator<N, ZD, U1> + Allocator<N, D> + Allocator<N, ZD>
+            DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
+            D: DimAdd<ZD> + DimAdd<U1>,
+            DefaultAllocator: Allocator<N, DimSum<D, ZD>, DimSum<D, U1>> + Allocator<N, DimSum<D, ZD>>,
+            DimSum<D, ZD>: DimMin<DimSum<D, U1>>,
+            DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>> + Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>, DimSum<D, U1>>
     {
         let x_size = self.r.nrows();
         let z_size = z.nrows();
@@ -220,23 +226,21 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         }
 
         // Form Augmented matrix for factorisation
-        let mut A = DMatrix::<N>::zeros(x_size + z_size, x_size+1); // Prefill with identity for top left and zero's in off diagonals
-        A.slice_mut((0, 0), (x_size, x_size)).copy_from(&self.R);
-        A.slice_mut((0, x_size), (x_size, 1)).copy_from(&self.r);
-        let B = noise_inv * hx;
-        A.slice_mut((x_size, 0), (z_size, x_size)).copy_from(&B);
-        let C = noise_inv * z;
-        A.slice_mut((x_size, x_size),(z_size,1)).copy_from(&C);
+        let xd = self.r.data.shape().0;
+        let mut A = MatrixMN::identity_generic(xd.add(z.data.shape().0), xd.add(U1));  // Prefill with identity for top left and zero's in off diagonals
+        copy_from(&mut A.slice_mut((0, 0), (x_size, x_size)), &self.R);
+        copy_from(&mut A.slice_mut((0, x_size), (x_size, 1)), &self.r);
+        copy_from(&mut A.slice_mut((x_size, 0), (z_size, x_size)),&(noise_inv * hx));
+        copy_from(&mut A.slice_mut((x_size, x_size),(z_size,1)),&(noise_inv * z));
 
         // Calculate factorisation so we have and upper triangular R
         let qr = QR::new(A);
-        // Extract the roots, junk in strict lower triangle
-        let qri = qr.qr_internal();
-        let res = qri.slice((0, 0), (x_size, x_size)).upper_triangle();
+        // Extract the roots
+        let r = qr.r();
 
-        // Extract the roots, junk in strict lower triangle
-        self.R.copy_from(&res);
-        self.r.copy_from(&qri.slice((0, x_size), (x_size,1)));
+        // Extract the roots
+        copy_from(&mut self.R, &r.slice((0, 0), (x_size, x_size)));
+        copy_from(&mut self.r, &r.slice((0, x_size), (x_size,1)));
 
         Result::Ok(())
     }

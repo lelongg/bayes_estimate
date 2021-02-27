@@ -72,6 +72,11 @@ fn test_information_dynamic() {
 }
 
 #[test]
+fn test_information_root_dynamic() {
+    test_estimator(&mut InformationRootState::new_zero(Dynamic::new(2)));
+}
+
+#[test]
 fn test_ud_dynamic() {
     test_estimator(&mut UDState::new_zero(Dynamic::new(2)));
 }
@@ -352,14 +357,10 @@ fn test_estimator<D: Dim>(est: &mut dyn TestEstimator<D>)
 where
     ShapeConstraint: SameNumberOfRows<U2, D> + SameNumberOfColumns<U2, D>,
     ShapeConstraint: SameNumberOfRows<D, U2> + SameNumberOfColumns<D, U2>,
-    DefaultAllocator: Allocator<f64, D, D>
-        + Allocator<f64, D>
-        + Allocator<f64, U1, D>
-        + Allocator<f64, D, U1>
-        + Allocator<f64, U1>
+    DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, U1, D> + Allocator<f64, D, U1> + Allocator<f64, U1>
         + Allocator<f64, U2, U2>
-        + Allocator<usize, D, D>
-        + Allocator<usize, D>,
+        + Allocator<usize, D, D> + Allocator<usize, D>,
 {
     let d = est.dim();
 
@@ -384,30 +385,32 @@ where
 
     check(est.init(&init_state), "init").unwrap();
 
-    let xx = KalmanEstimator::kalman_state(est).unwrap().1;
+    let xx = est.kalman_state().unwrap().1;
     println!("init={:.6}{:.6}", xx.x, xx.X);
+    est.trace_state();
 
     for _c in 0..2 {
-        let predict_x = Estimator::state(est).unwrap();
+        let predict_x = est.state().unwrap();
         let predict_xp = fx(&predict_x);
         est.predict_fn(&predict_xp, fx, &linear_pred_model, &additive_noise);
         let pp = KalmanEstimator::kalman_state(est).unwrap().1;
         println!("pred={:.6}{:.6}", pp.x, pp.X);
+        est.trace_state();
 
-        let obs_x = Estimator::state(est).unwrap();
+        let obs_x = est.state().unwrap();
         let s = z - hx(&obs_x);
         est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
-        let oo = KalmanEstimator::kalman_state(est).unwrap().1;
+        let oo = est.kalman_state().unwrap().1;
         println!("obs={:.6}{:.6}", oo.x, oo.X);
         est.trace_state();
     }
 
-    let obs_x = Estimator::state(est).unwrap();
+    let obs_x = est.state().unwrap();
     let s = z - hx(&obs_x);
     est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
-    let xx = KalmanEstimator::kalman_state(est).unwrap().1;
+    let xx = est.kalman_state().unwrap().1;
     println!("final={:.6}{:.6}", xx.x, xx.X);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
