@@ -1,4 +1,4 @@
-//! Example solving a simple problem using a Bayesian state estimator.
+//! Operation of a Bayesian state estimator in a simple example.
 //!
 //! A Kalman filter (estimator) with one state and constant noises.
 
@@ -6,38 +6,35 @@ use nalgebra as na;
 use na::{Matrix1, Vector1};
 
 use bayes_estimate::models::{
-    KalmanState, LinearObserveModel, LinearPredictModel, ExtendedLinearObserver, CorrelatedNoise, ExtendedLinearPredictor
+    KalmanState, CorrelatedNoise, ExtendedLinearPredictor, ExtendedLinearObserver
 };
 
 fn main() {
-    // Construct simple Prediction and Observation models
-    let my_predict_model = LinearPredictModel {
-        Fx: Matrix1::new(1.)
-    };
+    // Construct simple linear prediction and observation models
+    let my_predict_model = Matrix1::new(1.);
     let my_predict_noise = CorrelatedNoise {
         Q: Matrix1::new(1.),
     };
-    let my_observe_model = LinearObserveModel {
-        Hx: Matrix1::new(1.),
-    };
+    let my_observe_model = Matrix1::new(1.);
     let my_observe_noise = CorrelatedNoise {
         Q: Matrix1::new(1.),
     };
 
     // Setup the initial state and covariance
-    let mut my_filter = KalmanState {
-        x: Vector1::new(10.),
-        X: Matrix1::new(0.)
+    let mut estimate = KalmanState {
+        x: Vector1::new(10.),   // initialy at 10
+        X: Matrix1::new(0.)     // with no uncertainty
     };
-    println!("Initial {:.1}{:.2}", my_filter.x, my_filter.X);
+    println!("Initial x{:.1} X{:.2}", estimate.x, estimate.X);
 
-    // Predict the filter forward
-    my_filter.predict (&my_predict_model, my_predict_model.Fx * my_filter.x, &my_predict_noise).unwrap();
-    println!("Predict {:.1}{:.2}", my_filter.x, my_filter.X);
+    // Make a state prediction
+    let predicted_x = my_predict_model * estimate.x;
+    estimate.predict (&my_predict_model, &predicted_x, &my_predict_noise).unwrap();
+    println!("Predict x{:.1} X{:.2}", estimate.x, estimate.X);
 
-    // Make an observation that we should be at 11
+    // Make an observation that we appear to be at 11
     let z = Vector1::new(11.);
-    let innovation = z - &my_observe_model.Hx * &my_filter.x;
-    my_filter.observe_innovation (&my_observe_model, &my_observe_noise, &innovation).unwrap();
-    println!("Filtered {:.1}{:.2}", my_filter.x, my_filter.X);
+    let innovation = z - &my_observe_model * &estimate.x;
+    estimate.observe_innovation (&innovation, &my_observe_model, &my_observe_noise).unwrap();
+    println!("Observe x{:.1} X{:.2}", estimate.x, estimate.X);
 }

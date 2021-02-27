@@ -12,10 +12,6 @@ num-traits = "0.2.14"
 
 [dev-dependencies]
 
-[profile.release]
-opt-level = 'z'
-lto = true
-
 [lib]
 name = "bayes_estimate"
 path = "src/lib.rs"
