@@ -24,7 +24,8 @@ use bayes_estimate::models::{
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 use bayes_estimate::cholesky::UDU;
-use nalgebra::MatrixN;
+use nalgebra::{MatrixN, DimMinimum, DimMin};
+use bayes_estimate::estimators::information_root::InformationRootState;
 
 const DT: f64 = 0.01;
 const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
@@ -49,6 +50,11 @@ fn test_covariance_u2() {
 #[test]
 fn test_information_u2() {
     test_estimator(&mut InformationState::new_zero(U2));
+}
+
+#[test]
+fn test_information_root_u2() {
+    test_estimator(&mut InformationRootState::new_zero(U2));
 }
 
 #[test]
@@ -203,6 +209,50 @@ where
         let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
         let info = self.observe_info(hx, &noise_inv, &(s + h(&x)));
         self.add_information(&info);
+        Ok(())
+    }
+}
+
+/// Test information estimator operations defined on a InformationRootState.
+impl<D: Dim> TestEstimator<D> for InformationRootState<f64, D>
+    where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
+        D: DimAdd<U1>,
+        DefaultAllocator: Allocator<f64, DimSum<D, U1>, DimSum<D, U1>> + Allocator<f64, DimSum<D, U1>> + Allocator<f64, D, U1> + Allocator<f64, U1>,
+        DimSum<D, U1>: DimMin<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>> + Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>, DimSum<D, U1>>
+        + Allocator<usize, D, D>,
+{
+    fn trace_state(&self) {
+        println!("{}", self.R);
+    }
+
+    fn dim(&self) -> D {
+        return self.r.data.shape().0;
+    }
+
+    fn predict_fn(
+        &mut self,
+        x_pred: &VectorN<f64, D>,
+        _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        fx: &MatrixN<f64, D>,
+        noise: &CoupledNoise<f64, D, U1>)
+    {
+        InformationRootState::predict(self,  x_pred, fx, &noise).unwrap();
+    }
+
+    fn observe(
+        &mut self,
+        s: &Vector1<f64>,
+        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        hx: &MatrixMN<f64, U1, D>,
+        noise: &CorrelatedNoise<f64, U1>,
+    ) -> Result<(), &'static str>
+        where
+            DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, U1> + Allocator<f64, U1, D> + Allocator<f64, D, U1> + Allocator<f64, D> + Allocator<f64, U1>
+    {
+        ExtendedLinearObserver::observe_innovation(self, s, hx, noise)?;
+
         Ok(())
     }
 }

@@ -111,16 +111,21 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
     }
 }
 
-impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootState<N, D>
+impl<N: RealField, D: Dim> InformationRootState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    fn predict(
+    pub fn predict<QD: Dim>(
         &mut self,
         x_pred: &VectorN<N, D>,
         fx: &MatrixN<N, D>,
-        noise: &CorrelatedNoise<N, D>,
+        noise: &CoupledNoise<N, D, QD>,
     ) -> Result<(), &'static str>
+        where
+            D: DimAdd<QD>,
+            DefaultAllocator: Allocator<N, DimSum<D, QD>, DimSum<D, QD>> + Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
+            DimSum<D, QD>: DimMin<DimSum<D, QD>>,
+            DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>> + Allocator<N, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>, DimSum<D, QD>>,
     {
         let mut Fx_inv = fx.clone();
         let invertable = Fx_inv.try_inverse_mut();
@@ -128,42 +133,13 @@ impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationRootStat
             return Err("Fx not invertable")?;
         }
 
-        self.predict(x_pred, &Fx_inv, noise).map(|_rcond| {})
+        self.predict_inv_model(x_pred, &Fx_inv, noise).map(|_rcond| {})
     }
-}
 
-impl<N: RealField, D: DimName, ZD: DimName> ExtendedLinearObserver<N, D, ZD> for InformationRootState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, ZD, ZD>
-        + Allocator<N, ZD, D>
-        + Allocator<N, D, ZD>
-        + Allocator<N, D>
-        + Allocator<N, ZD>
-{
-    fn observe_innovation(
+    pub fn predict_inv_model<QD: Dim>(
         &mut self,
-        s: &VectorN<N, ZD>,
-        hx: &MatrixMN<N, ZD, D>,
-        noise: &CorrelatedNoise<N, ZD>,
-    ) -> Result<(), &'static str>
-    {
-        let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in predict")?.inverse();
-        let x = self.state()?;
-
-        self.observe_info(hx, &noise_inv, &(s + hx * x))
-    }
-}
-
-impl<N: RealField, D: DimName> InformationRootState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D>
-        + Allocator<N, D>
-{
-    pub fn predict<QD: DimName>(
-        &mut self,
-        pred_inv: MatrixN<N, D>, // Inverse of linear prediction model Fx
-        x_pred: VectorN<N, D>,
+        x_pred: &VectorN<N, D>,
+        fx_inv: &MatrixN<N, D>, // Inverse of linear prediction model Fx
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
         where
@@ -200,7 +176,7 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         let r = qr.r();
         copy_from(&mut self.R, &r.slice((q_size, q_size), (x_size, x_size)));
 
-        self.r = &self.R * &x_pred;    // compute r from x_pred
+        self.r = &self.R * x_pred;    // compute r from x_pred
 
         return Result::Ok(UDU::new().UCrcond(&self.R));    // compute rcond of result
     }
@@ -243,5 +219,32 @@ impl<N: RealField, D: DimName> InformationRootState<N, D>
         copy_from(&mut self.r, &r.slice((0, x_size), (x_size,1)));
 
         Result::Ok(())
+    }
+}
+
+impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for InformationRootState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
+        D: DimAdd<ZD> + DimAdd<U1>,
+        DefaultAllocator: Allocator<N, DimSum<D, ZD>, DimSum<D, U1>> + Allocator<N, DimSum<D, ZD>>,
+        DimSum<D, ZD>: DimMin<DimSum<D, U1>>,
+        DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>> + Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>, DimSum<D, U1>>
+{
+    fn observe_innovation(
+        &mut self,
+        s: &VectorN<N, ZD>,
+        hx: &MatrixMN<N, ZD, D>,
+        noise: &CorrelatedNoise<N, ZD>,
+    ) -> Result<(), &'static str>
+    {
+        let udu = UDU::new();
+        let mut QI = noise.Q.clone();
+        let rcond = udu.UCfactor_n(&mut QI, s.nrows());
+        check_positive(rcond, "Q not PD")?;
+        let singular = udu.UTinverse(&mut QI);
+        assert!(!singular, "singular QI");   // unexpected check_positive should prevent singular
+
+        let x = self.state()?;
+        self.observe_info(&(s + hx * x), hx, &QI)
     }
 }
