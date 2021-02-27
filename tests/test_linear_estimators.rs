@@ -28,13 +28,13 @@ use nalgebra::{MatrixN, DimMinimum, DimMin};
 use bayes_estimate::estimators::information_root::InformationRootState;
 
 const DT: f64 = 0.01;
-const V_NOISE: f64 = 0.1; // Velocity noise, giving mean squared error bound
+const V_NOISE: f64 = 0.2; // Velocity noise, giving mean squared error bound
 const V_GAMMA: f64 = 1.; // Velocity correlation, giving velocity change time constant
 // Filter's Initial state uncertainty: System state is unknown
 const I_P_NOISE: f64 = 1000.;
 const I_V_NOISE: f64 = 10.;
 // Noise on observing system state
-const OBS_NOISE: f64 = 0.001;
+const OBS_NOISE: f64 = 0.1;
 
 
 // Minimum allowable reciprocal condition number for PD Matrix factorisations
@@ -471,13 +471,13 @@ fn expect_state<D : Dim>(state: &KalmanState<f64, D>)
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
 {
-    let expect_x = Vector2::new(1000.000001, 0.000225);
+    let expect_x = Vector2::new(1000.002994, 0.889320);
     approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001);
     approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01);
 
-    approx::assert_abs_diff_eq!(state.X[(0,0)], 0.000000, epsilon = 0.000001);
-    approx::assert_abs_diff_eq!(state.X[(0,1)], 0.000049, epsilon = 0.000001);
-    approx::assert_abs_diff_eq!(state.X[(1,1)], 0.014703, epsilon = 0.000003);
+    approx::assert_abs_diff_eq!(state.X[(0,0)], 0.003992, epsilon = 0.000001);
+    approx::assert_abs_diff_eq!(state.X[(0,1)], 0.195639, epsilon = 0.000001);
+    approx::assert_abs_diff_eq!(state.X[(1,1)], 58.107609, epsilon = 0.000003);
 }
 
 /// Create a Dynamic or Static copy.
