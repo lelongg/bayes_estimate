@@ -1,8 +1,14 @@
 [package]
 name = "bayes_estimate"
-version = "0.1.0"
+version = "0.5.0"
 authors = ["Michael Stevens <mail@michael-stevens.de>"]
 edition = "2018"
+description = "Bayesian estimation library. Kalman filter, Informatiom, Square root, Information root, Unscented and UD filters. Numerically and dimensionally generic implementation using nalgebra. Provides fast numerically stable estimation solutions."
+repository = "https://git.code.sf.net/p/bayesclasses/rustcode"
+readme = "README.md"
+categories = [ "science", "engineering", "robotics" ]
+keywords = [ "kalman", "bayesian", "linear", "discrete" ]
+license = "MIT "
 
 [dependencies]
 nalgebra = {path ="../nalgebra", version="0.24.1"}

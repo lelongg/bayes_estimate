@@ -11,9 +11,14 @@ Linear estimators such as the Kalman Filter are commonly applied.
 
 Bayes+Estimate is an open source library for Rust. The library implements a wide variety of numerical algorithms for Bayesian estimation of discrete systems.
 
-Prediction and observation models are represented by a hierarchy of traits that define the estimation operations for different models.
-State representations are defined by structs.
+State and noise models have been logically seperated and are defined by their structures.
+Prediction and observation are represented by traits that define the estimation operations for different models.
 Estimators implement the models for their state representation and provide a numerical implementation of the operations.
+
+The estimators provide consistent numerical implementations which allow numerically stable estimators to be implemented. For linear
+estimation the conditioning of the estimate as a reciprocal condition number is calculated.
+
+This work is based on my Bayes++ C++ Bayesian estimation library. See http://bayesclasses.sourceforge.net/Bayes++.html
 
 # Licensing
 
