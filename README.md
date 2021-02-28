@@ -1,5 +1,4 @@
 # Bayes+Estimate the Bayesian estimation library.
-Copyright (c) 2020 Michael Stevens
 
 Bayesian estimation is a probabilistic technique for data fusion. The technique combines a concise mathematical formulation of a system with observations of that system.
 Probabilities are used to represent the state of a system, likelihood functions to represent their relationships.
@@ -19,6 +18,8 @@ The estimators provide consistent numerical implementations which allow numerica
 estimation the conditioning of the estimate as a reciprocal condition number is calculated.
 
 This work is based on my Bayes++ C++ Bayesian estimation library. See http://bayesclasses.sourceforge.net/Bayes++.html
+
+Copyright (c) 2020 Michael Stevens
 
 # Licensing
 
