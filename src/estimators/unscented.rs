@@ -9,8 +9,6 @@
 //! Unscented transforms can be optimised for particular functions by vary the Kappa parameter from its usual value of 1.
 //! Implements the classic Duplex 'Unscented' transform.
 
-use simba::simd::SimdComplexField;
-
 use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN, storage::Storage};
 
@@ -116,7 +114,7 @@ pub fn unscented<N: RealField, D: Dim>(xX: &KalmanState<N, D>, scale: N) -> Resu
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    let sigma = xX.X.clone().cholesky().ok_or("unscented X not PSD")?.l() * scale.simd_sqrt();
+    let sigma = xX.X.clone().cholesky().ok_or("unscented X not PSD")?.l() * scale.sqrt();
 
     // Generate UU with the same sample Mean and Covariance
     let mut UU: Vec<VectorN<N, D>> = Vec::with_capacity(2 * xX.x.nrows() + 1);
