@@ -6,7 +6,7 @@ edition = "2018"
 description = "Bayesian estimation library. Kalman filter, Informatiom, Square root, Information root, Unscented and UD filters. Numerically and dimensionally generic implementation using nalgebra. Provides fast numerically stable estimation solutions."
 repository = "https://git.code.sf.net/p/bayesclasses/rustcode"
 readme = "README.md"
-categories = [ "science", "engineering", "robotics" ]
+categories = [ "science", "science:robotics" ]
 keywords = [ "kalman", "bayesian", "linear", "discrete" ]
 license = "MIT "
 
