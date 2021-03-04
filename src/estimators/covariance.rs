@@ -51,11 +51,8 @@ where
         Ok(rcond)
     }
 
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        Ok((
-            N::one(),
-            self.clone()
-        ))
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
+        Ok(self.clone())
     }
 }
 

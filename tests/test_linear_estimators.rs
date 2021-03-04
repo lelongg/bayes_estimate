@@ -14,7 +14,7 @@ use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstrain
 use na::base::storage::Storage;
 use na::{allocator::Allocator, DefaultAllocator, U1, U2};
 use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
-use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
+use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2, Matrix2x3};
 use na::{MatrixMN, RealField};
 use nalgebra as na;
 
@@ -44,6 +44,9 @@ const LIMIT_PD: f64 = f64::EPSILON * 1e5;
 
 #[test]
 fn test_covariance_u2() {
+    let m6 = Matrix2x3::from_iterator([1.1f32, 2.1, 1.2, 2.2, 1.3, 2.3].iter().cloned());
+
+
     test_estimator(&mut KalmanState::new_zero(U2));
 }
 
@@ -334,10 +337,8 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKalmanState<N, D>
         Ok(N::one())
     }
 
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
-        return Ok(
-            (N::one(), self.kalman.clone())
-        );
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
+        return Ok(self.kalman.clone())
     }
 }
 
@@ -432,7 +433,7 @@ where
 
     check(est.init(&init_state), "init").unwrap();
 
-    let xx = est.kalman_state().unwrap().1;
+    let xx = est.kalman_state().unwrap();
     println!("init={:.6}{:.6}", xx.x, xx.X);
     est.trace_state();
 
@@ -440,7 +441,7 @@ where
         let predict_x = est.state().unwrap();
         let predict_xp = fx(&predict_x);
         est.predict_fn(&predict_xp, fx, &linear_pred_model, &additive_noise);
-        let pp = KalmanEstimator::kalman_state(est).unwrap().1;
+        let pp = KalmanEstimator::kalman_state(est).unwrap();
         println!("pred={:.6}{:.6}", pp.x, pp.X);
         est.trace_state();
 
@@ -448,7 +449,7 @@ where
         let s = z - hx(&obs_x);
         est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
-        let oo = est.kalman_state().unwrap().1;
+        let oo = est.kalman_state().unwrap();
         println!("obs={:.6}{:.6}", oo.x, oo.X);
         est.trace_state();
     }
@@ -457,7 +458,7 @@ where
     let s = z - hx(&obs_x);
     est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
-    let xx = est.kalman_state().unwrap().1;
+    let xx = est.kalman_state().unwrap();
     println!("final={:.6}{:.6}", xx.x, xx.X);
 
     expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });

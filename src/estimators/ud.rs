@@ -105,7 +105,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for UDState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        KalmanEstimator::kalman_state(self).map(|r| r.1.x)
+        KalmanEstimator::kalman_state(self).map(|r| r.x)
     }
 }
 
@@ -131,20 +131,14 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
     /// Derive the KalmanState from the UDState.
     ///
     /// The covariance matrix X is recomposed from U.d.U' in the UD matrix.
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
         // assign elements of common left block of M into X
         let x_shape = self.x.data.shape().0;
         let mut X = matrix::as_zeros((x_shape, x_shape));
         matrix::copy_from(&mut X, &self.UD.columns(0, self.UD.nrows()));
         UDU::UdUrecompose(&mut X);
 
-        Ok((
-            self.udu.one,
-            KalmanState {
-                x: self.x.clone(),
-                X,
-            },
-        ))
+        Ok(KalmanState { x: self.x.clone(), X })
     }
 }
 

@@ -62,7 +62,7 @@ where
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
 
     /// The estimator's estimate of the system's KalmanState.
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str>;
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str>;
 }
 
 /// An extended linear predictor.

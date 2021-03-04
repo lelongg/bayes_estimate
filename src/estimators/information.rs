@@ -36,7 +36,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for InformationState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        KalmanEstimator::kalman_state(self).map(|r| r.1.x)
+        KalmanEstimator::kalman_state(self).map(|r| r.x)
     }
 }
 
@@ -53,13 +53,13 @@ where
         Ok(rcond::rcond_symetric(&state.X))
     }
 
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
         // Covariance
         let X = self.I.clone().cholesky().ok_or("Y not PD")?.inverse();
         // State
         let x = &X * &self.i;
 
-        Ok((rcond::rcond_symetric(&self.I), KalmanState { x, X }))
+        Ok(KalmanState { x, X })
     }
 }
 

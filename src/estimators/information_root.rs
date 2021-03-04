@@ -74,7 +74,7 @@ impl<N: RealField, D: Dim> Estimator<N, D> for InformationRootState<N, D>
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        self.kalman_state().map(|res| res.1.x)
+        self.kalman_state().map(|res| res.x)
     }
 }
 
@@ -97,7 +97,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
         Result::Ok(cholesky::UDU::UdUrcond(&state.X))
     }
 
-    fn kalman_state(&self) -> Result<(N, KalmanState<N, D>), &'static str> {
+    fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
         let shape = self.R.data.shape();
         let mut RI = MatrixN::identity_generic(shape.0, shape.1);
         self.R.solve_upper_triangular_mut(&mut RI);
@@ -107,7 +107,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
         // State, x= inv(R).r
         let x = RI * &self.r;
 
-        Result::Ok((N::one(), KalmanState { x, X }))
+        Result::Ok(KalmanState { x, X })
     }
 }
 
