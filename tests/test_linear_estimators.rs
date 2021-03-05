@@ -10,32 +10,25 @@
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
 use approx;
-use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
-use na::base::storage::Storage;
+
+use bayes_estimate::cholesky::UDU;
+use bayes_estimate::estimators::information_root::InformationRootState;
+use bayes_estimate::estimators::sir::{SampleState, standard_resampler};
+use bayes_estimate::models::{
+    Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
+    InformationState, KalmanEstimator, KalmanState, UDState
+};
+use bayes_estimate::noise::{CorrelatedFactorNoise, CorrelatedNoise, CoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, U1, U2};
 use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
-use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2, Matrix2x3};
+use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{MatrixMN, RealField};
+use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
+use na::base::storage::Storage;
 use nalgebra as na;
-
-use bayes_estimate::models::{
-    InformationState, KalmanState, UDState,
-    Estimator, KalmanEstimator, ExtendedLinearPredictor, ExtendedLinearObserver
-};
-use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
-use bayes_estimate::cholesky::UDU;
-use nalgebra::{MatrixN, DimMinimum, DimMin};
-use bayes_estimate::estimators::information_root::InformationRootState;
-
-const DT: f64 = 0.01;
-const V_NOISE: f64 = 0.2; // Velocity noise, giving mean squared error bound
-const V_GAMMA: f64 = 1.; // Velocity correlation, giving velocity change time constant
-// Filter's Initial state uncertainty: System state is unknown
-const I_P_NOISE: f64 = 1000.;
-const I_V_NOISE: f64 = 10.;
-// Noise on observing system state
-const OBS_NOISE: f64 = 0.1;
-
+use nalgebra::{DimMin, DimMinimum, DVector, MatrixN};
+use bayes_estimate::estimators::sir;
+use rand::RngCore;
 
 // Minimum allowable reciprocal condition number for PD Matrix factorisations
 // Use 1e5  * epsilon give 5 decimal digits of headroom
@@ -44,9 +37,6 @@ const LIMIT_PD: f64 = f64::EPSILON * 1e5;
 
 #[test]
 fn test_covariance_u2() {
-    let m6 = Matrix2x3::from_iterator([1.1f32, 2.1, 1.2, 2.2, 1.3, 2.3].iter().cloned());
-
-
     test_estimator(&mut KalmanState::new_zero(U2));
 }
 
@@ -95,6 +85,16 @@ fn test_unscented_dynamic() {
     test_estimator(&mut UnscentedKalmanState::new_zero(Dynamic::new(2)));
 }
 
+#[test]
+fn test_sir_dynamic() {
+    let mut s = Vec::with_capacity(10000);
+    for _i in 0..10000 {
+        s.push(DVector::zeros(2));
+    }
+    let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
+    test_estimator(&mut SampleState::new_equal_weigth(s, Box::new(rng)));
+}
+
 
 
 /// Checks a the reciprocal condition number exceeds a minimum.
@@ -127,6 +127,10 @@ where
         return Estimator::state(self).unwrap().data.shape().0;
     }
 
+    fn allow_error_by(&self) -> f64 {
+        1f64
+    }
+
     fn trace_state(&self) {}
 
     /// Prediction with additive noise
@@ -143,6 +147,7 @@ where
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -168,6 +173,7 @@ where
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        _z: &Vector1<f64>,
         _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -201,6 +207,7 @@ where
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        _z: &Vector1<f64>,
         _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -244,6 +251,7 @@ impl<D: Dim> TestEstimator<D> for InformationRootState<f64, D>
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        _z: &Vector1<f64>,
         _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -280,6 +288,7 @@ where
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        _z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -366,6 +375,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
     fn observe(
         &mut self,
         s: &Vector1<f64>,
+        _z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         _hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
@@ -375,6 +385,73 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
     }
 }
 
+/// Test SIR estimator operations defined on a SampleState.
+impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
+    where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f32, D>,
+{
+    fn trace_state(&self) {
+        // println!("{:?}\n{:?}", self.w, self.s);
+    }
+
+    fn allow_error_by(&self) -> f64 {
+     1000f64
+    }
+
+    fn dim(&self) -> D {
+        return self.s[0].data.shape().0;
+    }
+
+    fn predict_fn(
+        &mut self,
+        _x_pred: &VectorN<f64, D>,
+        f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        _fx: &MatrixN<f64, D>,
+        noise: &CoupledNoise<f64, D, U1>)
+    {
+        self.predict(f);
+        let correlated_noise = CorrelatedNoise::from_coupled::<U1>(noise);
+        correlated_noise.add_sample_noise(self).unwrap();
+    }
+
+    fn observe(
+        &mut self,
+        _s: &Vector1<f64>,
+        z: &Vector1<f64>,
+        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        _hx: &MatrixMN<f64, U1, D>,
+        noise: &CorrelatedNoise<f64, U1>,
+    ) -> Result<(), &'static str>
+    {
+        let zinv = noise.Q.cholesky().unwrap().inverse();
+        let logdetz = noise.Q.determinant().ln();
+
+        let mut obs_l = Vec::<f32>::with_capacity(self.s.len());
+        for s in self.s.iter() {
+            let innov = z - h(s);
+            let logl = innov.dot(&(&zinv * &innov));
+            let l = (-0.5*(logl + logdetz)).exp();
+            obs_l.push(l as f32);
+        }
+
+        self.sample_likelihood(obs_l);
+        let mut resampler = |presamples: &mut sir::Resamples, w: &mut DVector<f32>, rng: &mut dyn RngCore| {standard_resampler(presamples, w, rng)};
+        let mut roughener= |ps: &mut Vec<VectorN<f64, D>>, rng: &mut dyn RngCore| {SampleState::roughen_minmax(ps, 1., rng)};
+        self.update_resample(&mut resampler, &mut roughener)?;
+
+        Ok(())
+    }
+}
+
+
+const DT: f64 = 0.01;
+const V_NOISE: f64 = 0.2; // Velocity noise, giving mean squared error bound
+const V_GAMMA: f64 = 1.; // Velocity correlation, giving velocity change time constant
+// Filter's Initial state uncertainty: System state is unknown
+const I_P_NOISE: f64 = 2.;
+const I_V_NOISE: f64 = 0.1;
+// Noise on observing system state
+const OBS_NOISE: f64 = 0.1;
 
 /// Simple prediction model.
 fn fx<D: Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
@@ -427,7 +504,7 @@ where
     let z = &Vector1::new(1000.);
 
     let init_state: KalmanState<f64, D> = KalmanState {
-        x: new_copy(d, U1, &Vector2::new(900., 1.5)),
+        x: new_copy(d, U1, &Vector2::new(1000., 1.5)),
         X: new_copy(d, d, &Matrix2::new(sqr(I_P_NOISE), 0.0, 0.0, sqr(I_V_NOISE))),
     };
 
@@ -447,7 +524,7 @@ where
 
         let obs_x = est.state().unwrap();
         let s = z - hx(&obs_x);
-        est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
+        est.observe(&s, &z, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
         let oo = est.kalman_state().unwrap();
         println!("obs={:.6}{:.6}", oo.x, oo.X);
@@ -456,26 +533,26 @@ where
 
     let obs_x = est.state().unwrap();
     let s = z - hx(&obs_x);
-    est.observe(&s, hx, &linear_obs_model, &co_obs_noise).unwrap();
+    est.observe(&s, &z, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
     let xx = est.kalman_state().unwrap();
     println!("final={:.6}{:.6}", xx.x, xx.X);
 
-    expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X });
+    expect_state(&KalmanState::<f64, D> { x: xx.x, X: xx.X }, 0.5 * est.allow_error_by());
 }
 
 /// Test the KalmanState is as expected.
-fn expect_state<D : Dim>(state: &KalmanState<f64, D>)
+fn expect_state<D : Dim>(state: &KalmanState<f64, D>, allow_by: f64)
 where
     DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
 {
-    let expect_x = Vector2::new(1000.002994, 0.889320);
-    approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001);
-    approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01);
+    let expect_x = Vector2::new(1000.004971, 1.470200);
+    approx::assert_relative_eq!(state.x[0], expect_x[0], max_relative = 0.00000001 * allow_by);
+    approx::assert_relative_eq!(state.x[1], expect_x[1], max_relative = 0.01 * allow_by);
 
-    approx::assert_abs_diff_eq!(state.X[(0,0)], 0.003992, epsilon = 0.000001);
-    approx::assert_abs_diff_eq!(state.X[(0,1)], 0.195639, epsilon = 0.000001);
-    approx::assert_abs_diff_eq!(state.X[(1,1)], 58.107609, epsilon = 0.000003);
+    approx::assert_abs_diff_eq!(state.X[(0,0)], 0.003331, epsilon = 0.000001 * allow_by);
+    approx::assert_abs_diff_eq!(state.X[(0,1)], 0.000032, epsilon = 0.000001 * allow_by);
+    approx::assert_abs_diff_eq!(state.X[(1,1)], 0.009607, epsilon = 0.000003 * allow_by);
 }
 
 /// Create a Dynamic or Static copy.
