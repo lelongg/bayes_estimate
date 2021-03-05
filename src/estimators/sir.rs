@@ -1,5 +1,30 @@
-//! SIR state estimation.
 //!
+//! Sampling Importance Resampleing estimation.
+//! Also know as a weighted Booststrap.
+//!
+//! References
+//!  [1] "Novel approach to nonlinear-non-Guassian Bayesian state estimation"
+//!   NJ Gordon, DJ Salmond, AFM Smith IEE Proceeding-F Vol.140 No.2 April 1993
+//!  [2] Building Robust Simulation-based Filter for Evolving Data Sets"
+//!   J Carpenter, P Clifford, P Fearnhead Technical Report Unversity of Oxford
+//!
+//!  A variety of resampling algorithms can be used for the SIR filter.
+//!  There are implementations for two algorithms:
+//!   standard_resample: Standard resample algorithm from [1]
+//!   systematic_resample: A Simple stratified resampler from [2]
+//!
+//! NOTES:
+//!  SIR algorithm is sensitive to the PRNG.
+//!  In particular random uniform must be [0..1) NOT [0..1]
+//!  Quantisation in the random number generator must not approach the sample size.
+//!  This will result in quantisation of the resampling.
+//!  For example if random identically equal to 0 becomes highly probable due to quantisation
+//!  this will result in the first sample being selectively draw whatever its likelihood.
+//!
+//!  Numerics
+//!   Resampling requires comparisons of normalised weights. These may
+//!   become insignificant if Likelihoods have a large range. Resampling becomes ill conditioned
+//!   for these samples.
 
 
 use num_traits::{Float, Pow, ToPrimitive};
