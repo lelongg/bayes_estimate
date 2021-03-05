@@ -61,6 +61,17 @@ fn test_unscented_u2() {
 }
 
 #[test]
+fn test_sir_u2() {
+    let mut s = Vec::with_capacity(10000);
+    for _i in 0..10000 {
+        s.push(VectorN::<f64, U2>::zeros());
+    }
+    let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
+    test_estimator(&mut SampleState::new_equal_weigth(s, Box::new(rng)));
+}
+
+
+#[test]
 fn test_covariance_dynamic() {
     test_estimator(&mut KalmanState::new_zero(Dynamic::new(2)));
 }
@@ -146,7 +157,6 @@ where
     /// Observation with correlected noise
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
         z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
@@ -172,16 +182,15 @@ where
 
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
-        _z: &Vector1<f64>,
-        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        z: &Vector1<f64>,
+        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        ExtendedLinearObserver::observe_innovation(self, s, hx, noise)
+        ExtendedLinearObserver::observe_innovation(self, &(z - h(&self.x)), hx, noise)
     }
 }
 
@@ -206,16 +215,16 @@ where
 
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
-        _z: &Vector1<f64>,
-        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        z: &Vector1<f64>,
+        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str>
     where
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
-        ExtendedLinearObserver::observe_innovation(self, s, hx, noise)?;
+        let s = z - h(&self.state().unwrap());
+        ExtendedLinearObserver::observe_innovation(self, &s, hx, noise)?;
         Ok(())
     }
 }
@@ -250,15 +259,15 @@ impl<D: Dim> TestEstimator<D> for InformationRootState<f64, D>
 
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
-        _z: &Vector1<f64>,
-        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        z: &Vector1<f64>,
+        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str>
         where
             DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, U1> + Allocator<f64, U1, D> + Allocator<f64, D, U1> + Allocator<f64, D> + Allocator<f64, U1>
     {
+        let s = &(z - h(&self.state().unwrap()));
         ExtendedLinearObserver::observe_innovation(self, s, hx, noise)?;
 
         Ok(())
@@ -287,17 +296,14 @@ where
 
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
-        _z: &Vector1<f64>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
+        z: &Vector1<f64>,
+        _h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str> {
-        let x = &self.x;
-        let z = s + h(x);
         let udu = UDU::new();
         let mut ud: MatrixMN<f64,U1,U1> = noise.Q.clone_owned();
-        udu.UdUfactor_variant2(&mut ud, s.nrows());
+        udu.UdUfactor_variant2(&mut ud, z.nrows());
 
         let noise_fac = CorrelatedFactorNoise::<f64, U1>{ UD: ud };
         let h_normalize = |_h: &mut VectorN<f64, U1>, _h0: &VectorN<f64, U1>| {};
@@ -374,13 +380,13 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
 
     fn observe(
         &mut self,
-        s: &Vector1<f64>,
-        _z: &Vector1<f64>,
+        z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         _hx: &MatrixMN<f64, U1, D>,
         noise: &CorrelatedNoise<f64, U1>,
     ) -> Result<(), &'static str> {
         let h_normalize = |_h: &mut VectorN<f64, U1>, _h0: &VectorN<f64, U1>| {};
+        let s = &(z - h(&self.state().unwrap()));
         self.kalman.observe_unscented(h, h_normalize, noise, s, self.kappa)
     }
 }
@@ -416,7 +422,6 @@ impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
 
     fn observe(
         &mut self,
-        _s: &Vector1<f64>,
         z: &Vector1<f64>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, U1>,
         _hx: &MatrixMN<f64, U1, D>,
@@ -522,18 +527,14 @@ where
         println!("pred={:.6}{:.6}", pp.x, pp.X);
         est.trace_state();
 
-        let obs_x = est.state().unwrap();
-        let s = z - hx(&obs_x);
-        est.observe(&s, &z, hx, &linear_obs_model, &co_obs_noise).unwrap();
+        est.observe(&z, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
         let oo = est.kalman_state().unwrap();
         println!("obs={:.6}{:.6}", oo.x, oo.X);
         est.trace_state();
     }
 
-    let obs_x = est.state().unwrap();
-    let s = z - hx(&obs_x);
-    est.observe(&s, &z, hx, &linear_obs_model, &co_obs_noise).unwrap();
+    est.observe(&z, hx, &linear_obs_model, &co_obs_noise).unwrap();
 
     let xx = est.kalman_state().unwrap();
     println!("final={:.6}{:.6}", xx.x, xx.X);
