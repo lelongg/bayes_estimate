@@ -10,10 +10,11 @@
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
 use approx;
+use rand::RngCore;
 
 use bayes_estimate::cholesky::UDU;
 use bayes_estimate::estimators::information_root::InformationRootState;
-use bayes_estimate::estimators::sir::{SampleState, standard_resampler};
+use bayes_estimate::estimators::sir::{Likelihoods, SampleState, standard_resampler};
 use bayes_estimate::models::{
     Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
     InformationState, KalmanEstimator, KalmanState, UDState
@@ -23,13 +24,10 @@ use na::{allocator::Allocator, DefaultAllocator, U1, U2};
 use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
 use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
 use na::{MatrixMN, RealField};
+use na::{DimMin, DimMinimum, DVector, MatrixN};
 use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
 use na::base::storage::Storage;
 use nalgebra as na;
-use nalgebra::{DimMin, DimMinimum, DVector, MatrixN};
-use bayes_estimate::estimators::sir;
-use rand::RngCore;
-
 
 #[test]
 fn test_covariance_u2() {
@@ -407,19 +405,21 @@ impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
     ) -> Result<(), &'static str>
     {
         let zinv = noise.Q.cholesky().unwrap().inverse();
-        let logdetz = noise.Q.determinant().ln();
+        let logdetz = noise.Q.determinant().ln() as f32;
 
-        let mut obs_l = Vec::<f32>::with_capacity(self.s.len());
-        for s in self.s.iter() {
-            let innov = z - h(s);
-            let logl = innov.dot(&(&zinv * &innov));
-            let l = (-0.5*(logl + logdetz)).exp();
-            obs_l.push(l as f32);
-        }
+        let z_likelihood = |x: &VectorN<f64, D>| -> f32 {
+            let innov = z - h(x);
+            let logl = innov.dot(&(&zinv * &innov)) as f32;
+            (-0.5*(logl + logdetz)).exp()
+        };
+        self.observe(z_likelihood);
 
-        self.sample_likelihood(obs_l);
-        let mut resampler = |presamples: &mut sir::Resamples, w: &mut DVector<f32>, rng: &mut dyn RngCore| {standard_resampler(presamples, w, rng)};
-        let mut roughener= |ps: &mut Vec<VectorN<f64, D>>, rng: &mut dyn RngCore| {SampleState::roughen_minmax(ps, 1., rng)};
+        let mut resampler = |w: &mut Likelihoods, rng: &mut dyn RngCore| {
+            standard_resampler(w, rng)
+        };
+        let mut roughener= |s: &mut Vec<VectorN<f64, D>>, rng: &mut dyn RngCore| {
+            SampleState::roughen_minmax(s, 1., rng)
+        };
         self.update_resample(&mut resampler, &mut roughener)?;
 
         Ok(())

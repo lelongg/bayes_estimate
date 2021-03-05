@@ -6,7 +6,7 @@ use num_traits::{Float, Pow, ToPrimitive};
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, StandardNormal, Uniform};
 
-use na::{DefaultAllocator, Dim, DVector, MatrixN, RealField, VectorN};
+use na::{DefaultAllocator, Dim, MatrixN, RealField, VectorN};
 use na::allocator::Allocator;
 use na::storage::Storage;
 use nalgebra as na;
@@ -22,17 +22,17 @@ where
     DefaultAllocator: Allocator<N, D>,
 {
     pub s: Samples<N, D>,
-    pub w: Weights,
+    pub w: Likelihoods,
     pub rng: Box<dyn RngCore>
 }
 
 pub type Samples<N, D> = Vec<VectorN<N, D>>;
 
-pub type Weights = DVector<f32>;
+pub type Likelihoods = Vec<f32>;
 
 pub type Resamples = Vec<u32>;
 
-pub type Resampler = dyn FnMut(&mut Resamples, &mut DVector<f32>, &mut dyn RngCore) -> Result<(u64, f32), &'static str>;
+pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u64, f32), &'static str>;
 
 pub type Roughener<N, D> = dyn FnMut(&mut Vec<VectorN<N, D>>, &mut dyn RngCore);
 
@@ -45,7 +45,7 @@ where
         let samples = s.len();
         SampleState {
             s,
-            w: DVector::<f32>::repeat(samples, 1f32),
+            w: vec![1f32; samples],
             rng
         }
     }
@@ -57,12 +57,23 @@ where
      */
     {
         // Predict particles S using supplied predict model
-        self.s.iter_mut().for_each(|r|{
-            r.copy_from(&f(r))
+        self.s.iter_mut().for_each(|el|{
+            el.copy_from(&f(el))
         });
     }
 
-    pub fn sample_likelihood(&mut self, l: Vec<f32>) {
+    pub fn observe<LikelihoodFn>(&mut self, l: LikelihoodFn)
+    where
+        LikelihoodFn: Fn(&VectorN<N, D>) -> f32,
+    {
+        let mut wi = self.w.iter_mut();
+        for z in self.s.iter() {
+            let w = wi.next().unwrap();
+            *w *= l(z);
+        }
+    }
+
+    pub fn sample_likelihood(&mut self, l: Likelihoods) {
         assert!(self.w.len() == l.len());
         let mut li = l.iter();
         for wi in self.w.iter_mut() {
@@ -84,12 +95,10 @@ where
      */
     {
         // Resample based on likelihood weights
-        let mut resamples = Resamples::with_capacity(self.w.nrows());
-        let (_unqiue_samples, lcond) = resampler(&mut resamples, &mut self.w, self.rng.as_mut())?;
+        let (resamples, _unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
-        // update s
+        // select live sample and rougen
         SampleState::live_samples(&mut self.s, &resamples);
-
         roughener(&mut self.s, self.rng.as_mut()); // Roughen samples
 
         self.w.fill(1.);        // Resampling results in uniform weights
@@ -97,7 +106,7 @@ where
         Ok(lcond)
     }
 
-    fn live_samples(p: &mut Vec<VectorN<N, D>>, resamples: &Resamples)
+    fn live_samples(s: &mut Vec<VectorN<N, D>>, resamples: &Resamples)
     /* Update ps by selectively copying resamples
      * Uses a in-place copying algorithm
      * Algorithm: In-place copying
@@ -106,13 +115,13 @@ where
      */
     {
         // reverse_copy_if live
-        let mut si = p.len();
+        let mut si = s.len();
         let mut livei = si;
         for pr in resamples.iter().rev() {
             si -= 1;
             if *pr > 0 {
                 livei -= 1;
-                p[livei] = p[si].clone();
+                s[livei] = s[si].clone();
             }
         }
         assert!(si == 0);
@@ -122,7 +131,7 @@ where
             let mut res = *pr;
             if res > 0 {
                 loop {
-                    p[si] = p[livei].clone();
+                    s[si] = s[livei].clone();
                     si += 1;
                     res -= 1;
                     if res == 0 { break; }
@@ -130,8 +139,8 @@ where
                 livei += 1;
             }
         }
-        assert!(si == p.len());
-        assert!(livei == p.len());
+        assert!(si == s.len());
+        assert!(livei == s.len());
     }
 
     pub fn roughen_minmax(ps: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
@@ -189,13 +198,13 @@ pub fn test() {
     let rng = rand::thread_rng();
     let mut sir = SampleState::new_equal_weigth(Vec::new(), Box::new(rng));
 
-    let resampler : &mut Resampler = &mut |presamples: &mut Resamples, w: &mut DVector<f32>, rng: &mut dyn RngCore| {standard_resampler(presamples, w, rng)};
+    let resampler : &mut Resampler = &mut |w: &mut Likelihoods, rng: &mut dyn RngCore| {standard_resampler(w, rng)};
     let mut roughener= |ps: &mut Vec<VectorN<f32, Dynamic>>, rng: &mut dyn RngCore| {SampleState::roughen_minmax(ps, 1f32, rng)};
     sir.update_resample(resampler, &mut roughener).unwrap();
 }
 
 
-pub fn standard_resampler(resamples: &mut Resamples, w: &mut DVector<f32>, rng: &mut dyn RngCore) -> Result<(u64, f32), &'static str>
+pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u64, f32), &'static str>
 /* Standard resampler from [1]
  * Algorithm:
  *	A particle is chosen once for each time its cumulative weight intersects with a uniform random draw.
@@ -213,8 +222,6 @@ pub fn standard_resampler(resamples: &mut Resamples, w: &mut DVector<f32>, rng: 
  */
 {
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
-
-    assert!(resamples.len() == 0);
 
     // Normalised cumulative sum of likelihood weights (Kahan algorithm), and find smallest weight
     let mut wmin = f32::max_value();
@@ -244,21 +251,19 @@ pub fn standard_resampler(resamples: &mut Resamples, w: &mut DVector<f32>, rng: 
     }
 
     // Sorted uniform random distribution [0..1) for each resample
-    let urng = rng.sample_iter(uniform01).take(w.nrows());
-    let mut ur = DVector::<f32>::from_iterator(w.nrows(), urng);
+    let urng = rng.sample_iter(uniform01).take(w.len());
+    let mut ur: Vec<f32> = urng.collect();
+    ur.sort_by(|a, b| a.total_cmp(&b));
+    assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
 
-    unsafe {
-        ur.data.as_vec_mut().sort_by(|a, b| a.total_cmp(&b));
-    }
-    // ur.into_iter().sorted().collect();
-    assert!(ur[0] >= 0. && ur[ur.nrows()-1] < 1.);	// very bad if random is incorrect
     // Scale ur to cumulative sum
-    ur *= wcum;
+    ur.iter_mut().for_each(|el| *el *= wcum);
 
     // Resamples based on cumulative weights from sorted resample random values
     let mut uri = ur.iter().cloned();
     let mut urn = uri.next();
     let mut unique : u64 = 0;
+    let mut resamples = Resamples::with_capacity(w.len());
 
     for wi in w.iter().cloned() {
         let mut res: u32 = 0;		// assume not resampled until find out otherwise
@@ -278,7 +283,7 @@ pub fn standard_resampler(resamples: &mut Resamples, w: &mut DVector<f32>, rng: 
         return Err("weights are not numeric and cannot be resampled");
     }
 
-    return Ok((unique, wmin / wcum));
+    return Ok((resamples, unique, wmin / wcum));
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D>  for SampleState<N, D>
