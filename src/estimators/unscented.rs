@@ -80,16 +80,13 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
         let mut XZ;
         {
             let XX0 = &UU[0] - x;
-            let ZZ0t = ZZ[0].transpose();
-            XZ = XX0 * ZZ0t;
-            XZ *= two * kappa;
+            XZ = XX0 * ZZ[0].transpose() * two * kappa;
         }
 
         // Remaining Unscented points
         for i in 1..ZZ.len() {
             let XXi = (&UU[i] - x).clone_owned();
-            let ZZit = ZZ[i].transpose();
-            XZ += XXi * ZZit;
+            XZ += XXi * ZZ[i].transpose();
         }
         XZ /= two * x_kappa;
 

@@ -129,9 +129,9 @@ where
         let I_shape = self.I.data.shape();
 
         // A = invFx'*Y*invFx ,Inverse Predict covariance
-        let A = (&self.I * &pred_inv).transpose() * &pred_inv;
+        let A = (&self.I * &pred_inv).tr_mul(&pred_inv);
         // B = G'*A*G+invQ , A in coupled additive noise space
-        let mut B = (&A * &noise.G).transpose() * &noise.G;
+        let mut B = (&A * &noise.G).tr_mul(&noise.G);
         for i in 0..noise.q.nrows() {
             if noise.q[i] < N::zero() {
                 // allow PSD q, let infinity propagate into B
@@ -152,7 +152,7 @@ where
         // Information
         self.I = &ig * &A;
         // Information state
-        let y = pred_inv.transpose() * &self.i;
+        let y = pred_inv.tr_mul(&self.i);
         self.i = &ig * &y;
 
         Ok(rcond)
@@ -173,7 +173,7 @@ where
         DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
     {
         // Observation Information
-        let HxTZI = hx.transpose() * noise_inv;
+        let HxTZI = hx.tr_mul(noise_inv);
         // Calculate EIF i = Hx'*ZI*z
         let ii = &HxTZI * z;
         // Calculate EIF I = Hx'*ZI*Hx
