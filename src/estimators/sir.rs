@@ -80,7 +80,7 @@ where
      *  Post: S represent the predicted distribution, stochastic_samples := samples in S
      */
     {
-        // Predict particles S using supplied predict model
+        // Predict particles s using supplied prediction function
         self.s.iter_mut().for_each(|el|{
             el.copy_from(&f(el))
         });
@@ -97,7 +97,7 @@ where
         }
     }
 
-    pub fn sample_likelihood(&mut self, l: Likelihoods) {
+    pub fn observe_likelihood(&mut self, l: Likelihoods) {
         assert!(self.w.len() == l.len());
         let mut li = l.iter();
         for wi in self.w.iter_mut() {
@@ -105,7 +105,7 @@ where
         }
     }
 
-    pub fn update_resample(&mut self, resampler: &mut Resampler, roughener: &mut Roughener<N, D>) -> Result<f32, &'static str>
+    pub fn update_resample(&mut self, resampler: &mut Resampler, roughener: &mut Roughener<N, D>) -> Result<(u32, f32), &'static str>
     /* Resample particles using weights and roughen
      * Pre : S represent the predicted distribution
      * Post: S represent the fused distribution, n_resampled from weighted_resample
@@ -119,7 +119,7 @@ where
      */
     {
         // Resample based on likelihood weights
-        let (resamples, _unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
+        let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
         // select live sample and rougen
         SampleState::live_samples(&mut self.s, &resamples);
@@ -127,7 +127,7 @@ where
 
         self.w.fill(1.);        // Resampling results in uniform weights
 
-        Ok(lcond)
+        Ok((unqiue_samples, lcond))
     }
 
     fn live_samples(s: &mut Vec<VectorN<N, D>>, resamples: &Resamples)
@@ -168,8 +168,6 @@ where
     }
 
     pub fn roughen_minmax(ps: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
-    where
-        DefaultAllocator: Allocator<f32, D> + Allocator<N, D, U1>,
     /* Roughening
      *  Uses algorithm from Ref[1] using max-min in each state of P
      *  K is scaling factor for roughening noise
@@ -240,9 +238,9 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
 /* Standard resampler from [1]
  * Algorithm:
  *	A particle is chosen once for each time its cumulative weight intersects with a uniform random draw.
- *	Complexity O(n*log(n))
+ *	Complexity is that of Vec::sort, O(n * log(n)) worst-case
  *  This complexity is required to sort the uniform random draws made,
- *	this allows comparing of the two ordered lists w(cumulative) and ur (the sort random draws).
+ *	this allows comparing of the two ordered lists w(cumulative) and ur (the sorted random draws).
  * Output:
  *  resamples number of times this particle should be resampled
  *  number of unqiue particles (number of non zeros in resamples)
