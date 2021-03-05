@@ -30,10 +30,6 @@ use nalgebra::{DimMin, DimMinimum, DVector, MatrixN};
 use bayes_estimate::estimators::sir;
 use rand::RngCore;
 
-// Minimum allowable reciprocal condition number for PD Matrix factorisations
-// Use 1e5  * epsilon give 5 decimal digits of headroom
-const LIMIT_PD: f64 = f64::EPSILON * 1e5;
-
 
 #[test]
 fn test_covariance_u2() {
@@ -106,24 +102,6 @@ fn test_sir_dynamic() {
     test_estimator(&mut SampleState::new_equal_weigth(s, Box::new(rng)));
 }
 
-
-
-/// Checks a the reciprocal condition number exceeds a minimum.
-///
-/// IEC 559 NaN values are never true
-fn check(res: Result<f64, &'static str>, what: &'static str) -> Result<f64, String> {
-    match res {
-        Ok(_) => {
-            let rcond = res.unwrap();
-            if rcond > LIMIT_PD {
-                Ok(rcond)
-            } else {
-                Err(format!("{}: {}", what, rcond))
-            }
-        }
-        Err(err) => Err(err.to_string()),
-    }
-}
 
 fn sqr(x: f64) -> f64 {
     x * x
@@ -345,11 +323,11 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UnscentedKalmanState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
 {
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         self.kalman.x.copy_from(&state.x);
         self.kalman.X.copy_from(&state.X);
 
-        Ok(N::one())
+        Ok(())
     }
 
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
@@ -513,7 +491,7 @@ where
         X: new_copy(d, d, &Matrix2::new(sqr(I_P_NOISE), 0.0, 0.0, sqr(I_V_NOISE))),
     };
 
-    check(est.init(&init_state), "init").unwrap();
+    est.init(&init_state).unwrap();
 
     let xx = est.kalman_state().unwrap();
     println!("init={:.6}{:.6}", xx.x, xx.X);

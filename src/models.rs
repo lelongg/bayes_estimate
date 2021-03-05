@@ -59,7 +59,7 @@ where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Initialise the estimator with a KalmanState.
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str>;
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str>;
 
     /// The estimator's estimate of the system's KalmanState.
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str>;

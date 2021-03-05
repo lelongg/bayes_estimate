@@ -42,13 +42,13 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for KalmanState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         self.x = state.x.clone();
         self.X = state.X.clone();
         let rcond = rcond::rcond_symetric(&self.X);
         check_non_negativ(rcond, "X not PSD")?;
 
-        Ok(rcond)
+        Ok(())
     }
 
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
@@ -92,7 +92,7 @@ where
         // Inverse innovation covariance
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
         // Kalman gain, X*Hx'*SI
-        let W = &XHt * SI;
+        let W = XHt * SI;
 
         // State update
         self.x += &W * s;

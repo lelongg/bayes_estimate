@@ -116,7 +116,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
     /// Initialise the UDState with a KalmanState.
     ///
     /// The covariance matrix X is factorised into a U.d.U' as a UD matrix.
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         self.x = state.x.clone();
 
         // Factorise X into UD
@@ -125,7 +125,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
         let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
         matrix::check_non_negativ(rcond, "X not PSD")?;
 
-        Ok(self.udu.one)
+        Ok(())
     }
 
     /// Derive the KalmanState from the UDState.

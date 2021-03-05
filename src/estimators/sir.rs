@@ -324,13 +324,13 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         for s in self.s.iter_mut() {
             s.copy_from(&state.x);
         }
         CorrelatedNoise{Q: state.X.clone()}.add_sample_noise(self)?;
 
-        Ok(N::one())
+        Ok(())
     }
 
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {

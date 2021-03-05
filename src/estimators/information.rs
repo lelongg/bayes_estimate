@@ -44,13 +44,13 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         // Information
         self.I = state.X.clone().cholesky().ok_or("X not PD")?.inverse();
         // Information state
         self.i = &self.I * &state.x;
 
-        Ok(rcond::rcond_symetric(&state.X))
+        Ok(())
     }
 
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {

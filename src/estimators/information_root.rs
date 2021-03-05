@@ -82,7 +82,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    fn init(&mut self, state: &KalmanState<N, D>) -> Result<N, &'static str> {
+    fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         // Information Root, inv(R).inv(R)' = X
         let udu = UDU::new();
         self.R.copy_from(&state.X);
@@ -94,7 +94,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for InformationRootState<N, D>
         // Information Root state, r=R*x
         self.r = &self.R * &state.x;
 
-        Result::Ok(cholesky::UDU::UdUrcond(&state.X))
+        Result::Ok(())
     }
 
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
