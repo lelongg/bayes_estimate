@@ -6,11 +6,10 @@ use num_traits::{Float, Pow, ToPrimitive};
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, StandardNormal, Uniform};
 
-use na::{DefaultAllocator, Dim, MatrixN, RealField, VectorN};
+use na::{DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
 use na::allocator::Allocator;
 use na::storage::Storage;
 use nalgebra as na;
-use nalgebra::{Dynamic, U1};
 
 use crate::cholesky::UDU;
 use crate::matrix::{check_non_negativ};
@@ -32,7 +31,7 @@ pub type Likelihoods = Vec<f32>;
 
 pub type Resamples = Vec<u32>;
 
-pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u64, f32), &'static str>;
+pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>;
 
 pub type Roughener<N, D> = dyn FnMut(&mut Vec<VectorN<N, D>>, &mut dyn RngCore);
 
@@ -194,17 +193,25 @@ where
     }
 }
 
-pub fn test() {
-    let rng = rand::thread_rng();
-    let mut sir = SampleState::new_equal_weigth(Vec::new(), Box::new(rng));
+impl<N: RealField, D: Dim> Estimator<N, D>  for SampleState<N, D>
+    where
+        DefaultAllocator: Allocator<N, D>,
+{
+    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
+        // Mean of distribution: mean of particles
+        let s_shape = self.s[0].data.shape();
+        let mut x = VectorN::zeros_generic(s_shape.0, s_shape.1);
+        for s in self.s.iter() {
+            x += s;
+        }
+        x /= N::from_usize(self.s.len()).unwrap();
 
-    let resampler : &mut Resampler = &mut |w: &mut Likelihoods, rng: &mut dyn RngCore| {standard_resampler(w, rng)};
-    let mut roughener= |ps: &mut Vec<VectorN<f32, Dynamic>>, rng: &mut dyn RngCore| {SampleState::roughen_minmax(ps, 1f32, rng)};
-    sir.update_resample(resampler, &mut roughener).unwrap();
+        Ok(x)
+    }
 }
 
 
-pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u64, f32), &'static str>
+pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
 /* Standard resampler from [1]
  * Algorithm:
  *	A particle is chosen once for each time its cumulative weight intersects with a uniform random draw.
@@ -221,8 +228,89 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
  *  A draw is made from 'r' for each particle
  */
 {
-    let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
+    let (wmin, wcum) = cumaltive_weigth(w)?;
 
+    // Sorted uniform random distribution [0..1) for each resample
+    let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
+    let urng = rng.sample_iter(uniform01).take(w.len());
+    let mut ur: Vec<f32> = urng.collect();
+    ur.sort_by(|a, b| a.total_cmp(&b));
+    assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
+
+    // Scale ur to cumulative sum
+    ur.iter_mut().for_each(|el| *el *= wcum);
+
+    // Resamples based on cumulative weights from sorted resample random values
+    let mut uri = ur.iter().cloned();
+    let mut urn = uri.next();
+    let mut unique : u32 = 0;
+    let mut resamples = Resamples::with_capacity(w.len());
+
+    for wi in w.iter().cloned() {
+        let mut res: u32 = 0;		// assume not resampled until find out otherwise
+        if (urn.is_some()) && urn.unwrap() < wi {
+            unique += 1;
+            loop {                        // count resamples
+                res += 1;
+                urn = uri.next();
+                if urn.is_none() { break; }
+                if !(urn.unwrap() < wi) { break;}
+            }
+        }
+        resamples.push(res);
+    }
+
+    if uri.peekable().peek().is_some() {                // resample failed due no non numeric weights
+        return Err("weights are not numeric and cannot be resampled");
+    }
+
+    return Ok((resamples, unique, wmin / wcum));
+}
+
+pub fn systematic_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
+/* Systematic resample algorithm from [2]
+ * Algorithm:
+ *	A particle is chosen once for each time its cumulative weight intersects with an equidistant grid.
+ *	A uniform random draw is chosen to position the grid within the cumulative weights
+ *	Complexity O(n)
+ * Output:
+ *  presamples number of times this particle should be resampled
+ *  uresamples number of unqiue particles (number of non zeros in Presamples)
+ *  w becomes a normalised cumulative sum
+ * Sideeffects:
+ *  A single draw is made from 'r'
+ */
+{
+    let (wmin, wcum) = cumaltive_weigth(w)?;
+
+    // Stratified step
+    let wstep = wcum / w.len() as f32;
+
+    let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
+    let ur = rng.sample(uniform01);
+
+    // Resamples based on cumulative weights
+    let mut resamples = Resamples::with_capacity(w.len());
+    let mut unique: u32 = 0;
+    let mut s = ur * wstep;		// random initialisation
+
+    for wi in w.iter() {
+        let mut res: u32 = 0;		// assume not resampled until find out otherwise
+        if s < *wi {
+            unique += 1;
+            loop {					// count resamples
+                res += 1;
+                s += wstep;
+                if !(s < *wi) {break;}
+            }
+        }
+        resamples.push(res);
+    }
+
+    Ok((resamples, unique, wmin / wcum))
+}
+
+fn cumaltive_weigth(w: &mut Likelihoods) -> Result<(f32, f32), &'static str> {
     // Normalised cumulative sum of likelihood weights (Kahan algorithm), and find smallest weight
     let mut wmin = f32::max_value();
     let mut wcum = 0.;
@@ -249,58 +337,7 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
     if wcum != wcum { // inequality due to NaN
         return Err("NaN cumulative weight sum");
     }
-
-    // Sorted uniform random distribution [0..1) for each resample
-    let urng = rng.sample_iter(uniform01).take(w.len());
-    let mut ur: Vec<f32> = urng.collect();
-    ur.sort_by(|a, b| a.total_cmp(&b));
-    assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
-
-    // Scale ur to cumulative sum
-    ur.iter_mut().for_each(|el| *el *= wcum);
-
-    // Resamples based on cumulative weights from sorted resample random values
-    let mut uri = ur.iter().cloned();
-    let mut urn = uri.next();
-    let mut unique : u64 = 0;
-    let mut resamples = Resamples::with_capacity(w.len());
-
-    for wi in w.iter().cloned() {
-        let mut res: u32 = 0;		// assume not resampled until find out otherwise
-        if (urn.is_some()) && urn.unwrap() < wi {
-            unique += 1;
-            loop {                        // count resamples
-                res += 1;
-                urn = uri.next();
-                if urn.is_none() { break; }
-                if !(urn.unwrap() < wi) { break;}
-            }
-        }
-        resamples.push(res);
-    }
-
-    if uri.peekable().peek().is_some() {                // resample failed due no non numeric weights
-        return Err("weights are not numeric and cannot be resampled");
-    }
-
-    return Ok((resamples, unique, wmin / wcum));
-}
-
-impl<N: RealField, D: Dim> Estimator<N, D>  for SampleState<N, D>
-    where
-    DefaultAllocator: Allocator<N, D>,
-{
-    fn state(&self) -> Result<VectorN<N, D>, &'static str> {
-        // Mean of distribution: mean of particles
-        let s_shape = self.s[0].data.shape();
-        let mut x = VectorN::zeros_generic(s_shape.0, s_shape.1);
-        for s in self.s.iter() {
-            x += s;
-        }
-        x /= N::from_usize(self.s.len()).unwrap();
-
-        Ok(x)
-    }
+    Ok((wmin, wcum))
 }
 
 impl<N: RealField, D: Dim> CorrelatedNoise<N, D>
