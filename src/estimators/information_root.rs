@@ -53,14 +53,14 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
         let shape = self.R.data.shape();
         let mut RI = MatrixN::identity_generic(shape.0, shape.1);
         self.R.solve_upper_triangular_mut(&mut RI);
-        self.r = RI.transpose() * &state.i;
+        self.r = RI.tr_mul(&state.i);
 
         Result::Ok(cholesky::UDU::UdUrcond(&state.I))
     }
 
     pub fn information_state(&self) -> Result<(N, InformationState<N, D>), &'static str> {
         // Information, I = R.R'
-        let I = &self.R.transpose() * &self.R ;
+        let I = self.R.tr_mul(&self.R);
         let x = self.state()?;
         // Information state, i = I.x
         let i = &I * x;
