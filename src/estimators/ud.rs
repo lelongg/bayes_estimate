@@ -81,14 +81,12 @@ impl<N: RealField, D: Dim> UDState<N, D>
     ///
     /// Uncorrelated observations are applied sequentially in the order they appear in z.
     ///
-    /// Therefore the model of each observation needs to be computed sequentially. Generally this
-    /// is inefficient and observe (UD_sequential_observe_model&) should be used instead
     //// Return: Minimum rcond of all sequential observe
     pub fn observe_innovation<ZD: Dim>(
         &mut self,
+        s: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,
         noise: &UncorrelatedNoise<N, ZD>,
-        s: &VectorN<N, ZD>,
     ) -> Result<N, &'static str>
         where
             DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
@@ -146,12 +144,13 @@ impl<N: RealField, D: Dim> UDState<N, D>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    /// Special Linear Hx observe for correlated factorised noise.
+    /// Special Linear 'hx' observe for correlated factorised noise.
     ///
-    /// Applies observations sequentially in the order they appear in z
+    /// Observation predictions are made with the linear 'hx'. This allows the observation noise
+    /// to be decorrelated. Observations can then be applied for each element in the order they appear in z.
     ///
-    /// Return: Minimum rcond of all sequential observe
-    pub fn observe_correlated<ZD: Dim>(
+    /// Return: Minimum rcond of all sequential observations
+    pub fn observe_linear_correlated<ZD: Dim>(
         &mut self,
         z: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,

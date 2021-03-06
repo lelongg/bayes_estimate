@@ -279,7 +279,7 @@ where
 
         let noise_fac = CorrelatedFactorNoise::<f64, U1>{ UD: ud };
         let h_normalize = |_h: &mut VectorN<f64, U1>, _h0: &VectorN<f64, U1>| {};
-        self.observe_correlated::<U1>(&z, hx, h_normalize, &noise_fac).map(|_rcond| {})
+        self.observe_linear_correlated::<U1>(&z, hx, h_normalize, &noise_fac).map(|_rcond| {})
     }
 }
 
