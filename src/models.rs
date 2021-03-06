@@ -81,19 +81,6 @@ where
     ) -> Result<(), &'static str>;
 }
 
-/// A functional predictor with correlated observation noise.
-///
-/// Uses a function model with additive noise.
-pub trait FunctionPredictor<N: SimdRealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
-{
-    fn predict(
-        &mut self,
-        f: fn(&VectorN<N, D>) -> VectorN<N, D>,
-        noise: &CorrelatedNoise<N, D>) -> Result<(), &'static str>;
-}
-
 /// A extended linear observer with correlated observation noise.
 ///
 /// Uses a non-linear state observation with linear estimation model with additive noise.
@@ -109,20 +96,4 @@ where
         Hx: &MatrixMN<N, ZD, D>, // Observation matrix
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str>;
-}
-
-/// A functional observer with correlated observation noise.
-///
-/// Uses a function model with correlated additive observation noise.
-pub trait FunctionObserver<N: SimdRealField, D: Dim, ZD: Dim>
-    where
-        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>
-{
-    fn observe_innovation(
-        &mut self,
-        z: &VectorN<N, ZD>,
-        h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
-        h_normalize: fn(&mut VectorN<N, D>, VectorN<N, D>),
-        noise: &CorrelatedNoise<N, ZD>)
-        -> Result<(), &'static str>;
 }
