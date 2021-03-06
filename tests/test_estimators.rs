@@ -543,9 +543,7 @@ where
     DefaultAllocator: Allocator<N, R, C>,
     ShapeConstraint: SameNumberOfRows<R, R1> + SameNumberOfColumns<C, C1>,
 {
-    unsafe {
-        let mut copy = MatrixMN::<N, R, C>::new_uninitialized_generic(r, c);
-        copy.copy_from(m);
-        copy
-    }
+    let mut copy = MatrixMN::<N, R, C>::zeros_generic(r, c);
+    copy.copy_from(m);
+    copy
 }
