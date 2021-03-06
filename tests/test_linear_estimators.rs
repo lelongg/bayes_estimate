@@ -370,7 +370,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
 /// Test SIR estimator operations defined on a SampleState.
 impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
     where
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D> + Allocator<f32, D>,
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
     fn trace_state(&self) {
         // println!("{:?}\n{:?}", self.w, self.s);
@@ -393,7 +393,10 @@ impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
     {
         self.predict(f);
         let correlated_noise = CorrelatedNoise::from_coupled::<U1>(noise);
-        correlated_noise.add_sample_noise(self).unwrap();
+        let sampler = correlated_noise.sampler().unwrap();
+        self.predict_sampled(move |x: &VectorN<f64,D>, rng: &mut dyn RngCore| -> VectorN<f64,D> {
+            f(&x) + sampler(rng)
+        });
     }
 
     fn observe(

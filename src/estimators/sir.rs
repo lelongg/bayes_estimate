@@ -25,7 +25,7 @@
 //!   likelihoods have a large range. Resampling becomes ill conditioned for these samples.
 
 
-use num_traits::{Float, Pow, ToPrimitive};
+use num_traits::{Float, Pow};
 use rand::{Rng, RngCore};
 use rand_distr::{Distribution, StandardNormal, Uniform};
 
@@ -70,7 +70,7 @@ pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Re
 pub type Roughener<N, D> = dyn FnMut(&mut Vec<VectorN<N, D>>, &mut dyn RngCore);
 
 
-impl<N: RealField + ToPrimitive, D: Dim> SampleState<N, D>
+impl<N: RealField, D: Dim> SampleState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
@@ -90,6 +90,15 @@ where
         self.s.iter_mut().for_each(|el|{
             el.copy_from(&f(el))
         });
+    }
+
+    pub fn predict_sampled(&mut self, f: impl Fn(&VectorN<N, D>, &mut dyn RngCore) -> VectorN<N, D>)
+    {
+        // Predict particles s using supplied prediction function
+        for si in 0..self.s.len() {
+            let ps = f(&self.s[si], &mut self.rng);
+            self.s[si].copy_from(&ps)
+        }
     }
 
     /// Observe sample likehoods using a likelihood function 'l'.
@@ -218,7 +227,7 @@ where
     }
 }
 
-impl<N: RealField, D: Dim> Estimator<N, D>  for SampleState<N, D>
+impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
     where
         DefaultAllocator: Allocator<N, D>,
 {
@@ -368,23 +377,24 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
 
 impl<N: RealField, D: Dim> CorrelatedNoise<N, D>
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn add_sample_noise(&self, state: &mut SampleState<N,D>) -> Result<(), &'static str> {
+    pub fn sampler<'s>(&'s self) -> Result<impl Fn(&mut dyn RngCore) -> VectorN<N,D> + 's, &'static str>
+    {
         // Decorrelate state noise
         let mut uc = self.Q.clone();
         let udu = UDU::new();
         let rcond = udu.UCfactor_n(&mut uc, self.Q.nrows());
-        check_non_negativ(rcond, "Init X not PSD")?;
+        check_non_negativ(rcond, "Q not PSD")?;
         udu.Lzero(&mut uc);
 
         // Sample from noise variance
-        for s in state.s.iter_mut() {
-            let rnormal = StandardNormal.sample_iter(&mut *state.rng).map(|n| {N::from_f32(n).unwrap()}).take(self.Q.nrows());
+        let noise_fn = move |rng: &mut dyn RngCore| -> VectorN<N,D> {
+            let rnormal = StandardNormal.sample_iter(rng).map(|n| {N::from_f32(n).unwrap()}).take(self.Q.nrows());
             let n = VectorN::<N, D>::from_iterator_generic(self.Q.data.shape().0, U1, rnormal);
-            *s += &uc * n;
-        }
-        Ok(())
+            &uc * n
+        };
+        Ok(noise_fn)
     }
 }
 
@@ -396,7 +406,11 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
         for s in self.s.iter_mut() {
             s.copy_from(&state.x);
         }
-        CorrelatedNoise{Q: state.X.clone()}.add_sample_noise(self)?;
+        let noise = CorrelatedNoise { Q: state.X.clone() };
+        let sampler = noise.sampler()?;
+        self.predict_sampled(move |x: &VectorN<N,D>, rng: &mut dyn RngCore| -> VectorN<N,D> {
+            x + sampler(rng)
+        });
 
         Ok(())
     }
