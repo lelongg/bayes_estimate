@@ -12,8 +12,8 @@ license = "MIT "
 
 [dependencies]
 nalgebra = {path ="../nalgebra", version="0.24.1"}
-rand = "0.8.3"
-rand_distr = "0.4.0"
+rand = "0.7.3"
+rand_distr = "0.3.0"
 num-traits = "0.2.14"
 
 [dev-dependencies]
