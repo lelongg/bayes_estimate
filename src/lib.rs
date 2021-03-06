@@ -1,23 +1,8 @@
 #![feature(total_cmp)]
 
-//!
 //! Bayes+Estimate the Bayesian estimation library.
 //! Copyright (c) 2020 Michael Stevens
 //!
-//! Bayesian estimation is a probabilistic technique for data fusion. The technique combines a concise mathematical formulation of a system with observations of that system.
-//! Probabilities are used to represent the state of a system, likelihood functions to represent their relationships.
-//! In this form Bayesian inference can be applied and further related probabilities deduced. See Wikipedia for information on probability theory, Bayes theorem, Bayesian inference.
-//!
-//! For discrete systems the Bayesian formulation results in a naturally iterative data fusion solution. For dynamic systems there is a class of solutions, discrete filters,
-//! that combine observed outputs of the system with the system's dynamic model. An estimator computes a estimate of the systems state with each observation of the system.
-//! Linear estimators such as the Kalman Filter are commonly applied.
-//!
-//! Bayes+Estimate is an open source library for Rust. The library implements a wide variety of numerical algorithms for Bayesian estimation of discrete systems.
-//!
-//! Prediction and observation models are represented by a hierarchy of traits that define the estimation operations for different models.
-//! State representations are defined by structs.
-//! Estimators implement the models for their state representation and provide a numerical implementation of the operations.
-//
 //! # Licensing
 //!
 //! All Bayes+Estimate source code files are copyright with the license conditions as given here. The copyright notice is that of the MIT license.

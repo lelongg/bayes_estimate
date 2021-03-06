@@ -1,11 +1,7 @@
-//! Test the numerical operations of linear and linearised estimator implementations.
+//! Test the numerical operations of estimator implementations.
 //!
-//! [`covariance`], [`information`], [`ud`] and [`unscented`] estimator implementations are tested.
-//!
-//! [`covariance`]: ../filters/covariance.html
-//! [`information`]: ../filters/information.html
-//! [`ud`]: ../filters/ud.html
-//! [`unscented`]: ../filters/unscented.html
+//! [`covariance`], [`information`], [`ud`] and [`unscented`] linearised estimator implementations are tested.
+//! [`sir`] sampled estimator is tested using the same model as for the linearised estimators.
 //!
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
