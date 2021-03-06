@@ -179,52 +179,6 @@ where
         assert!(livei == s.len());
     }
 
-    /// Min max roughening.
-    ///
-    /// Uses algorithm from Ref[1].
-    /// max-min in each state dimension in the samples determines the amount of normally distrubuted noise added to that
-    /// dimension for each sample.
-    ///
-    /// 'k' is scaling factor for normally distributed noise
-    ///
-    /// Numerics:
-    ///  If the are very few unique samples the roughening will colapse as it is not representative of the true state distribution.
-    pub fn roughen_minmax(s: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
-    {
-        let x_dim = s[0].data.shape().0;
-        let x_size = x_dim.value();
-        // Scale sigma by constant and state dimensions
-        let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
-
-        // Find min and max state dimension in all states
-        let mut xmin = s[0].clone();
-        let mut xmax = xmin.clone();
-        for si in s.iter_mut() {		// Loop includes 0 to simplify code
-            let mut mini = xmin.iter_mut();
-            let mut maxi = xmax.iter_mut();
-
-            for xd in si.iter() {
-                let minx = mini.next().unwrap();
-                let maxx = maxi.next().unwrap();
-
-                if *xd < *minx {*minx = *xd;}
-                if *xd > *maxx {*maxx = *xd;}
-            }
-        }
-        // Roughening st.dev from scaled max-min
-        let sigma = (xmax - xmin) * N::from_f32(sigma_scale).unwrap();
-        // Apply additive normally distributed noise to  to each state b
-        for si in s.iter_mut() {
-            // normally distribute noise with std dev determined by sigma for that dimension
-            let normal = StandardNormal.sample_iter(&mut *rng).map(|n| {N::from_f32(n).unwrap()});
-            let mut nr = VectorN::<N, D>::from_iterator_generic(x_dim, U1, normal.take(x_size));
-            for (ni, n) in nr.iter_mut().enumerate() {
-                *n *= sigma[ni];
-            }
-            // add noise
-            *si += nr;
-        }
-    }
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
@@ -373,6 +327,55 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
         return Err("NaN cumulative likelihood sum");
     }
     Ok((lmin, lcum))
+}
+
+/// Min max roughening.
+///
+/// Uses algorithm from Ref[1].
+/// max-min in each state dimension in the samples determines the amount of normally distrubuted noise added to that
+/// dimension for each sample.
+///
+/// 'k' is scaling factor for normally distributed noise
+///
+/// Numerics:
+///  If the are very few unique samples the roughening will colapse as it is not representative of the true state distribution.
+pub fn roughen_minmax<N: RealField, D:Dim>(s: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+{
+    let x_dim = s[0].data.shape().0;
+    let x_size = x_dim.value();
+    // Scale sigma by constant and state dimensions
+    let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
+
+    // Find min and max state dimension in all states
+    let mut xmin = s[0].clone();
+    let mut xmax = xmin.clone();
+    for si in s.iter_mut() {		// Loop includes 0 to simplify code
+        let mut mini = xmin.iter_mut();
+        let mut maxi = xmax.iter_mut();
+
+        for xd in si.iter() {
+            let minx = mini.next().unwrap();
+            let maxx = maxi.next().unwrap();
+
+            if *xd < *minx {*minx = *xd;}
+            if *xd > *maxx {*maxx = *xd;}
+        }
+    }
+    // Roughening st.dev from scaled max-min
+    let sigma = (xmax - xmin) * N::from_f32(sigma_scale).unwrap();
+    // Apply additive normally distributed noise to  to each state b
+    for si in s.iter_mut() {
+        // normally distribute noise with std dev determined by sigma for that dimension
+        let normal = StandardNormal.sample_iter(&mut *rng).map(|n| {N::from_f32(n).unwrap()});
+        let mut nr = VectorN::<N, D>::from_iterator_generic(x_dim, U1, normal.take(x_size));
+        for (ni, n) in nr.iter_mut().enumerate() {
+            *n *= sigma[ni];
+        }
+        // add noise
+        *si += nr;
+    }
 }
 
 impl<N: RealField, D: Dim> CorrelatedNoise<N, D>

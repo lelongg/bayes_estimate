@@ -58,14 +58,14 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
         Result::Ok(cholesky::UDU::UdUrcond(&state.I))
     }
 
-    pub fn information_state(&self) -> Result<(N, InformationState<N, D>), &'static str> {
+    pub fn information_state(&self) -> Result<InformationState<N, D>, &'static str> {
         // Information, I = R.R'
         let I = self.R.tr_mul(&self.R);
         let x = self.state()?;
         // Information state, i = I.x
         let i = &I * x;
 
-        Result::Ok((N::one(), InformationState { i, I }))
+        Result::Ok(InformationState { i, I })
     }
 }
 

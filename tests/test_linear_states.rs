@@ -11,27 +11,27 @@ fn test_init_matches_state() {
     );
     println!("UD {:} {:}", udstate.x, udstate.UD);
 
-    let kalman_state = udstate.kalman_state().unwrap().1;
+    let kalman_state = udstate.kalman_state().unwrap();
     println!("Kalman {:} {:}", kalman_state.x, kalman_state.X);
 
     udstate.init(&kalman_state).unwrap();
-    assert_kalman_eq(&kalman_state, &udstate.kalman_state().unwrap().1);
+    assert_kalman_eq(&kalman_state, &udstate.kalman_state().unwrap());
 
     let mut information_state = InformationState::new_zero(U2);
     information_state.init(&kalman_state).unwrap();
     println!("Information {:} {:}", information_state.i, information_state.I);
-    assert_kalman_eq(&kalman_state, &information_state.kalman_state().unwrap().1);
+    assert_kalman_eq(&kalman_state, &information_state.kalman_state().unwrap());
 
     let mut information_root_state = InformationRootState::new_zero(U2);
     information_root_state.init(&kalman_state).unwrap();
     println!("InformationRoot from Kalman {:} {:}", information_root_state.r, information_root_state.R);
-    assert_kalman_eq(&kalman_state, &information_root_state.kalman_state().unwrap().1);
-    assert_information_eq(&information_state, &information_root_state.information_state().unwrap().1);
+    assert_kalman_eq(&kalman_state, &information_root_state.kalman_state().unwrap());
+    assert_information_eq(&information_state, &information_root_state.information_state().unwrap());
 
     information_root_state.init_information(&information_state).unwrap();
     println!("InformationRoot from Information {:} {:}", information_root_state.r, information_root_state.R);
-    assert_kalman_eq(&kalman_state, &information_root_state.kalman_state().unwrap().1);
-    assert_information_eq(&information_state, &information_root_state.information_state().unwrap().1);
+    assert_kalman_eq(&kalman_state, &information_root_state.kalman_state().unwrap());
+    assert_information_eq(&information_state, &information_root_state.information_state().unwrap());
 }
 
 fn assert_kalman_eq(expect: &KalmanState<f64, U2>, actual: &KalmanState<f64, U2>, )

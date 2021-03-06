@@ -6,16 +6,6 @@
 //! Tests are performed with Dynamic matrices and matrices with fixed dimensions.
 
 use approx;
-use rand::RngCore;
-
-use bayes_estimate::cholesky::UDU;
-use bayes_estimate::estimators::information_root::InformationRootState;
-use bayes_estimate::estimators::sir::{Likelihoods, SampleState, standard_resampler};
-use bayes_estimate::models::{
-    Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
-    InformationState, KalmanEstimator, KalmanState, UDState
-};
-use bayes_estimate::noise::{CorrelatedFactorNoise, CorrelatedNoise, CoupledNoise};
 use na::{allocator::Allocator, DefaultAllocator, U1, U2};
 use na::{Dim, DimAdd, DimSum, Dynamic, VectorN};
 use na::{Matrix, Matrix1, Matrix1x2, Matrix2, Matrix2x1, Vector1, Vector2};
@@ -24,6 +14,16 @@ use na::{DimMin, DimMinimum, DVector, MatrixN};
 use na::base::constraint::{SameNumberOfColumns, SameNumberOfRows, ShapeConstraint};
 use na::base::storage::Storage;
 use nalgebra as na;
+use rand::RngCore;
+
+use bayes_estimate::cholesky::UDU;
+use bayes_estimate::estimators::information_root::InformationRootState;
+use bayes_estimate::estimators::sir;
+use bayes_estimate::models::{
+    Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
+    InformationState, KalmanEstimator, KalmanState, UDState
+};
+use bayes_estimate::noise::{CorrelatedFactorNoise, CorrelatedNoise, CoupledNoise};
 
 #[test]
 fn test_covariance_u2() {
@@ -57,7 +57,7 @@ fn test_sir_u2() {
         s.push(VectorN::<f64, U2>::zeros());
     }
     let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
-    test_estimator(&mut SampleState::new_equal_likelihood(s, Box::new(rng)));
+    test_estimator(&mut sir::SampleState::new_equal_likelihood(s, Box::new(rng)));
 }
 
 
@@ -93,7 +93,7 @@ fn test_sir_dynamic() {
         s.push(DVector::zeros(2));
     }
     let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
-    test_estimator(&mut SampleState::new_equal_likelihood(s, Box::new(rng)));
+    test_estimator(&mut sir::SampleState::new_equal_likelihood(s, Box::new(rng)));
 }
 
 
@@ -364,7 +364,7 @@ impl<D: Dim> TestEstimator<D> for UnscentedKalmanState<f64, D>
 }
 
 /// Test SIR estimator operations defined on a SampleState.
-impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
+impl<D: Dim> TestEstimator<D> for sir::SampleState<f64, D>
     where
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, U1, D> + Allocator<f64, D>,
 {
@@ -413,11 +413,11 @@ impl<D: Dim> TestEstimator<D> for SampleState<f64, D>
         };
         self.observe(z_likelihood);
 
-        let mut resampler = |w: &mut Likelihoods, rng: &mut dyn RngCore| {
-            standard_resampler(w, rng)
+        let mut resampler = |w: &mut sir::Likelihoods, rng: &mut dyn RngCore| {
+            sir::standard_resampler(w, rng)
         };
         let mut roughener= |s: &mut Vec<VectorN<f64, D>>, rng: &mut dyn RngCore| {
-            SampleState::roughen_minmax(s, 1., rng)
+            sir::roughen_minmax(s, 1., rng)
         };
         self.update_resample(&mut resampler, &mut roughener)?;
 
