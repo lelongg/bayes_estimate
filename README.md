@@ -28,6 +28,8 @@ The estimators operations provide consistent implementations which allow numeric
 For linear estimators the conditioning of the estimate as a reciprocal condition number can be calculated.
 For the *sir* estimator the sample likelihood conditioning can be calculated.
 
+The library supports no_std operation.
+
 This work is based on my Bayes++ C++ Bayesian estimation library. See http://bayesclasses.sourceforge.net/Bayes++.html
 
 Copyright (c) 2020 Michael Stevens
