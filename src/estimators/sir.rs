@@ -26,7 +26,7 @@
 
 
 use num_traits::{Float, Pow};
-use rand::{Rng, RngCore};
+use rand_core::RngCore;
 use rand_distr::{Distribution, StandardNormal, Uniform};
 
 use na::{DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
@@ -220,7 +220,7 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
 
     // Sorted uniform random distribution [0..1) for each resample
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
-    let mut ur: Vec<f32> = rng.sample_iter(uniform01).take(w.len()).collect();
+    let mut ur: Vec<f32> = uniform01.sample_iter(rng).take(w.len()).collect();
     ur.sort_by(|a, b| a.total_cmp(&b));
     assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
 
@@ -276,7 +276,7 @@ pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Resul
     let lstep = lcum / l.len() as f32;
 
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
-    let ur = rng.sample(uniform01);
+    let ur = uniform01.sample(rng);
 
     // Resamples based on cumulative likelihoods
     let mut resamples = Resamples::with_capacity(l.len());
