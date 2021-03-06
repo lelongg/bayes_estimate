@@ -61,7 +61,7 @@ fn test_sir_u2() {
         s.push(VectorN::<f64, U2>::zeros());
     }
     let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
-    test_estimator(&mut SampleState::new_equal_weigth(s, Box::new(rng)));
+    test_estimator(&mut SampleState::new_equal_likelihood(s, Box::new(rng)));
 }
 
 
@@ -97,7 +97,7 @@ fn test_sir_dynamic() {
         s.push(DVector::zeros(2));
     }
     let rng: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(1u64);
-    test_estimator(&mut SampleState::new_equal_weigth(s, Box::new(rng)));
+    test_estimator(&mut SampleState::new_equal_likelihood(s, Box::new(rng)));
 }
 
 

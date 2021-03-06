@@ -8,23 +8,21 @@
 //!  [2] Building Robust Simulation-based Filter for Evolving Data Sets"
 //!   J Carpenter, P Clifford, P Fearnhead Technical Report Unversity of Oxford
 //!
-//!  A variety of resampling algorithms can be used for the SIR filter.
-//!  There are implementations for two algorithms:
+//! A variety of resampling algorithms can be used for SIR.
+//! There are implementations for two algorithms:
 //!   standard_resample: Standard resample algorithm from [1]
 //!   systematic_resample: A Simple stratified resampler from [2]
 //!
 //! NOTES:
-//!  SIR algorithm is sensitive to the PRNG.
-//!  In particular random uniform must be [0..1) NOT [0..1]
-//!  Quantisation in the random number generator must not approach the sample size.
-//!  This will result in quantisation of the resampling.
-//!  For example if random identically equal to 0 becomes highly probable due to quantisation
+//!  SIR algorithms is sensitive to the PRNG properties.
+//!  In particular we require that the uniform random number range be [0..1) NOT [0..1].
+//!  Quantisation generated random number must not approach the sample size.  This will result in quantisation
+//!  of the resampling. For example if random identically equal to 0 becomes highly probable due to quantisation
 //!  this will result in the first sample being selectively draw whatever its likelihood.
 //!
-//!  Numerics
-//!   Resampling requires comparisons of normalised weights. These may
-//!   become insignificant if Likelihoods have a large range. Resampling becomes ill conditioned
-//!   for these samples.
+//! Numerics:
+//!   Resampling requires comparisons of normalised likelihoods. These may become insignificant if
+//!   likelihoods have a large range. Resampling becomes ill conditioned for these samples.
 
 
 use num_traits::{Float, Pow, ToPrimitive};
@@ -41,23 +39,34 @@ use crate::matrix::{check_non_negativ};
 use crate::models::{Estimator, KalmanEstimator, KalmanState};
 use crate::noise::CorrelatedNoise;
 
+/// Sample state.
+///
+/// State distribution is represented as state samples and their likelihood.
 pub struct SampleState<N: RealField, D: Dim>
 where
     DefaultAllocator: Allocator<N, D>,
 {
+    /// State samples
     pub s: Samples<N, D>,
+    /// and their likelihoods (bootstrap weights)
     pub w: Likelihoods,
+    /// A PRNG use to draw random samples
     pub rng: Box<dyn RngCore>
 }
 
+/// State samples.
 pub type Samples<N, D> = Vec<VectorN<N, D>>;
 
+/// likelihoods.
 pub type Likelihoods = Vec<f32>;
 
+/// Resample count.
 pub type Resamples = Vec<u32>;
 
+/// A resampling function.
 pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>;
 
+/// A roughening function.
 pub type Roughener<N, D> = dyn FnMut(&mut Vec<VectorN<N, D>>, &mut dyn RngCore);
 
 
@@ -65,7 +74,7 @@ impl<N: RealField + ToPrimitive, D: Dim> SampleState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new_equal_weigth(s: Vec<VectorN<N, D>>, rng: Box<dyn RngCore>) -> SampleState<N, D> {
+    pub fn new_equal_likelihood(s: Vec<VectorN<N, D>>, rng: Box<dyn RngCore>) -> SampleState<N, D> {
         let samples = s.len();
         SampleState {
             s,
@@ -74,11 +83,8 @@ where
         }
     }
 
+    /// Predict state using a state prediction function 'f'.
     pub fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>)
-    /* Predict state posterior with sampled noise model
-     *  Pre : S represent the prior distribution
-     *  Post: S represent the predicted distribution, stochastic_samples := samples in S
-     */
     {
         // Predict particles s using supplied prediction function
         self.s.iter_mut().for_each(|el|{
@@ -86,6 +92,8 @@ where
         });
     }
 
+    /// Observe sample likehoods using a likelihood function 'l'.
+    /// The sample likelihoods are multiplied by the observed likelihoods.
     pub fn observe<LikelihoodFn>(&mut self, l: LikelihoodFn)
     where
         LikelihoodFn: Fn(&VectorN<N, D>) -> f32,
@@ -97,6 +105,8 @@ where
         }
     }
 
+    /// Observe sample likehoods directly.
+    /// The sample likelihoods are multiplied by these likelihoods.
     pub fn observe_likelihood(&mut self, l: Likelihoods) {
         assert!(self.w.len() == l.len());
         let mut li = l.iter();
@@ -105,38 +115,31 @@ where
         }
     }
 
+    /// Resample using likelihoods and roughen the sample state.
+    /// Error returns:
+    ///   When the resampler fails due to numeric problems with the likelihoods
+    /// Returns:
+    ///  number of unique samples,
+    ///  smallest normalised likelohood, to determine numerical conditioning of likehoods
     pub fn update_resample(&mut self, resampler: &mut Resampler, roughener: &mut Roughener<N, D>) -> Result<(u32, f32), &'static str>
-    /* Resample particles using weights and roughen
-     * Pre : S represent the predicted distribution
-     * Post: S represent the fused distribution, n_resampled from weighted_resample
-     * Exceptions:
-     *  Bayes_filter_exception from resampler
-     *    unchanged: S, stochastic_samples
-     * Return
-     *  lcond, Smallest normalised weight, represents conditioning of resampling solution
-     *  lcond == 1 if no resampling performed
-     *  This should by multiplied by the number of samples to get the Likelihood function conditioning
-     */
     {
-        // Resample based on likelihood weights
+        // Resample based on likelihoods
         let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
         // select live sample and rougen
         SampleState::live_samples(&mut self.s, &resamples);
         roughener(&mut self.s, self.rng.as_mut()); // Roughen samples
 
-        self.w.fill(1.);        // Resampling results in uniform weights
+        self.w.fill(1.);        // Resampling results in uniform likelihoods
 
         Ok((unqiue_samples, lcond))
     }
 
+    /// Update 's' by selectively copying resamples.
+    /// Uses a in-place copying algorithm:
+    /// First copy the live samples (those resampled) to end of s.
+    /// Replicate live sample in-place start an the begining of s.
     fn live_samples(s: &mut Vec<VectorN<N, D>>, resamples: &Resamples)
-    /* Update ps by selectively copying resamples
-     * Uses a in-place copying algorithm
-     * Algorithm: In-place copying
-     *  First copy the live samples (those resampled) to end of P
-     *  Replicate live sample in-place
-     */
     {
         // reverse_copy_if live
         let mut si = s.len();
@@ -167,51 +170,50 @@ where
         assert!(livei == s.len());
     }
 
-    pub fn roughen_minmax(ps: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
-    /* Roughening
-     *  Uses algorithm from Ref[1] using max-min in each state of P
-     *  K is scaling factor for roughening noise
-     *  unique_samples is unchanged as roughening is used to postprocess observe resamples
-     * Numerical collapse of P
-     *  P with very small or zero range result in minimal roughening
-     * Exceptions:
-     *  none
-     *		unchanged: P
-     */
+    /// Min max roughening.
+    ///
+    /// Uses algorithm from Ref[1].
+    /// max-min in each state dimension in the samples determines the amount of normally distrubuted noise added to that
+    /// dimension for each sample.
+    ///
+    /// 'k' is scaling factor for normally distributed noise
+    ///
+    /// Numerics:
+    ///  If the are very few unique samples the roughening will colapse as it is not representative of the true state distribution.
+    pub fn roughen_minmax(s: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
     {
-        let x_dim = ps[0].data.shape().0;
+        let x_dim = s[0].data.shape().0;
         let x_size = x_dim.value();
-        // Scale Sigma by constant and state dimensions
-        let sigma_scale = k * f32::pow(ps.len() as f32, -1f32/(x_size as f32));
+        // Scale sigma by constant and state dimensions
+        let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
 
-        // Find min and max states in all P, precond P not empty
-        let mut xmin = ps[0].clone();
+        // Find min and max state dimension in all states
+        let mut xmin = s[0].clone();
         let mut xmax = xmin.clone();
-        for p in ps.iter_mut() {		// Loop includes 0 to simplify code
+        for si in s.iter_mut() {		// Loop includes 0 to simplify code
             let mut mini = xmin.iter_mut();
             let mut maxi = xmax.iter_mut();
 
-            for xp in p.iter() {
-                let min = mini.next().unwrap();
-                let max = maxi.next().unwrap();
+            for xd in si.iter() {
+                let minx = mini.next().unwrap();
+                let maxx = maxi.next().unwrap();
 
-                if *xp < *min {*min = *xp;}
-                if *xp > *max {*max = *xp;}
+                if *xd < *minx {*minx = *xd;}
+                if *xd > *maxx {*maxx = *xd;}
             }
         }
-        // Roughening st.dev max-min
-        let mut rootq = xmax - xmin;
-        rootq *= N::from_f32(sigma_scale).unwrap();
-        // Apply roughening predict based on scaled variance
-        for p in ps.iter_mut() {
-            let rnormal = StandardNormal.sample_iter(&mut *rng).map(|n| {N::from_f32(n).unwrap()}).take(x_size);
-            let mut n = VectorN::<N, D>::from_iterator_generic(x_dim, U1, rnormal);
-
-            // multiply elements by std dev
-            for (ni, nr) in n.iter_mut().enumerate() {
-                *nr *= rootq[ni];
+        // Roughening st.dev from scaled max-min
+        let sigma = (xmax - xmin) * N::from_f32(sigma_scale).unwrap();
+        // Apply additive normally distributed noise to  to each state b
+        for si in s.iter_mut() {
+            // normally distribute noise with std dev determined by sigma for that dimension
+            let normal = StandardNormal.sample_iter(&mut *rng).map(|n| {N::from_f32(n).unwrap()});
+            let mut nr = VectorN::<N, D>::from_iterator_generic(x_dim, U1, normal.take(x_size));
+            for (ni, n) in nr.iter_mut().enumerate() {
+                *n *= sigma[ni];
             }
-            *p += n;
+            // add noise
+            *si += nr;
         }
     }
 }
@@ -234,36 +236,35 @@ impl<N: RealField, D: Dim> Estimator<N, D>  for SampleState<N, D>
 }
 
 
+/// Standard resampler from [1].
+/// Algorithm:
+/// A sample is chosen once for each time its cumulative likelihood intersects with a uniform random draw.
+/// Complexity is that of Vec::sort, O(n * log(n)) worst-case.
+/// This complexity is required to sort the uniform random draws made,
+/// this allows comparing of the two ordered lists w(cumulative) and ur (the sorted random draws).
+///
+/// Returns:
+/// number of times this particle should be resampled,
+/// number of unqiue particles (number of non zeros in resamples),
+/// conditioning of the likelihoods (min likelihood / sum likelihoods)
+///
+/// Side effects:
+/// 'l' becomes a normalised cumulative sum,
+/// Draws are made from 'rng' for each likelihood
 pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
-/* Standard resampler from [1]
- * Algorithm:
- *	A particle is chosen once for each time its cumulative weight intersects with a uniform random draw.
- *	Complexity is that of Vec::sort, O(n * log(n)) worst-case
- *  This complexity is required to sort the uniform random draws made,
- *	this allows comparing of the two ordered lists w(cumulative) and ur (the sorted random draws).
- * Output:
- *  resamples number of times this particle should be resampled
- *  number of unqiue particles (number of non zeros in resamples)
- *  w becomes a normalised cumulative sum
- * Return:
- *  conditioning of the weigths (min weight / sum weigths)
- * Side effects:
- *  A draw is made from 'r' for each particle
- */
 {
-    let (wmin, wcum) = cumaltive_weigth(w)?;
+    let (lmin, lcum) = cumaltive_likelihood(w)?;
 
     // Sorted uniform random distribution [0..1) for each resample
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
-    let urng = rng.sample_iter(uniform01).take(w.len());
-    let mut ur: Vec<f32> = urng.collect();
+    let mut ur: Vec<f32> = rng.sample_iter(uniform01).take(w.len()).collect();
     ur.sort_by(|a, b| a.total_cmp(&b));
     assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
 
     // Scale ur to cumulative sum
-    ur.iter_mut().for_each(|el| *el *= wcum);
+    ur.iter_mut().for_each(|el| *el *= lcum);
 
-    // Resamples based on cumulative weights from sorted resample random values
+    // Resamples based on cumulative likelihood from sorted resample random values
     let mut uri = ur.iter().cloned();
     let mut urn = uri.next();
     let mut unique : u32 = 0;
@@ -283,84 +284,86 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
         resamples.push(res);
     }
 
-    if uri.peekable().peek().is_some() {                // resample failed due no non numeric weights
-        return Err("weights are not numeric and cannot be resampled");
+    if uri.peekable().peek().is_some() {  // resample failed due no non numeric likelhoods
+        return Err("likelihoods are not numeric and cannot be resampled");
     }
 
-    return Ok((resamples, unique, wmin / wcum));
+    return Ok((resamples, unique, lmin / lcum));
 }
 
-pub fn systematic_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
-/* Systematic resample algorithm from [2]
- * Algorithm:
- *	A particle is chosen once for each time its cumulative weight intersects with an equidistant grid.
- *	A uniform random draw is chosen to position the grid within the cumulative weights
- *	Complexity O(n)
- * Output:
- *  presamples number of times this particle should be resampled
- *  uresamples number of unqiue particles (number of non zeros in Presamples)
- *  w becomes a normalised cumulative sum
- * Sideeffects:
- *  A single draw is made from 'r'
- */
+/// Systematic resample algorithm from [2].
+/// Algorithm:
+/// A particle is chosen once for each time its cumulative likelihood intersects with an equidistant grid.
+/// A uniform random draw is chosen to position the grid within the cumulative likelihoods.
+/// Complexity O(n)
+///
+/// Returns:
+/// number of times this particle should be resampled,
+/// number of unqiue particles (number of non zeros in resamples),
+/// conditioning of the likelihoods (min likelihood / sum likelihoods)
+///
+/// Side effects:
+/// 'l' becomes a normalised cumulative sum,
+/// Draws are made from 'rng' for each likelihood
+pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
 {
-    let (wmin, wcum) = cumaltive_weigth(w)?;
+    let (lmin, lcum) = cumaltive_likelihood(l)?;
 
     // Stratified step
-    let wstep = wcum / w.len() as f32;
+    let lstep = lcum / l.len() as f32;
 
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
     let ur = rng.sample(uniform01);
 
-    // Resamples based on cumulative weights
-    let mut resamples = Resamples::with_capacity(w.len());
+    // Resamples based on cumulative likelihoods
+    let mut resamples = Resamples::with_capacity(l.len());
     let mut unique: u32 = 0;
-    let mut s = ur * wstep;		// random initialisation
+    let mut s = ur * lstep;		// random initialisation
 
-    for wi in w.iter() {
+    for li in l.iter() {
         let mut res: u32 = 0;		// assume not resampled until find out otherwise
-        if s < *wi {
+        if s < *li {
             unique += 1;
             loop {					// count resamples
                 res += 1;
-                s += wstep;
-                if !(s < *wi) {break;}
+                s += lstep;
+                if !(s < *li) {break;}
             }
         }
         resamples.push(res);
     }
 
-    Ok((resamples, unique, wmin / wcum))
+    Ok((resamples, unique, lmin / lcum))
 }
 
-fn cumaltive_weigth(w: &mut Likelihoods) -> Result<(f32, f32), &'static str> {
-    // Normalised cumulative sum of likelihood weights (Kahan algorithm), and find smallest weight
-    let mut wmin = f32::max_value();
-    let mut wcum = 0.;
+/// Normalised cumulative sum of likelihoods (Kahan algorithm), and find smallest likelihood.
+fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str> {
+    let mut lmin = f32::max_value();
+    let mut lcum = 0.;
     {
         let mut c = 0.;
-        for wi in w.iter_mut() {
-            if *wi < wmin {
-                wmin = *wi;
+        for li in l.iter_mut() {
+            if *li < lmin {
+                lmin = *li;
             }
-            let y = *wi - c;
-            let t = wcum + y;
-            c = t - wcum - y;
-            wcum = t;
-            *wi = t;
+            let y = *li - c;
+            let t = lcum + y;
+            c = t - lcum - y;
+            lcum = t;
+            *li = t;
         }
     }
-    if wmin < 0.{ // bad weights
-        return Err("negative weight");
+    if lmin < 0.{ // bad likelihoods
+        return Err("negative likelihood");
     }
-    if wcum <= 0. { // bad cumulative weights (previous check should actually prevent -ve
-        return Err("zero cumulative weight sum");
+    if lcum <= 0. { // bad cumulative likelihood (previous check should actually prevent -ve
+        return Err("zero cumulative likelihood sum");
     }
     // Any numerical failure should cascade into cumulative sum
-    if wcum != wcum { // inequality due to NaN
-        return Err("NaN cumulative weight sum");
+    if lcum != lcum { // inequality due to NaN
+        return Err("NaN cumulative likelihood sum");
     }
-    Ok((wmin, wcum))
+    Ok((lmin, lcum))
 }
 
 impl<N: RealField, D: Dim> CorrelatedNoise<N, D>
