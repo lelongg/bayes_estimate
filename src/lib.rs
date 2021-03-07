@@ -1,5 +1,3 @@
-#![feature(total_cmp)]
-
 //! Bayes+Estimate the Bayesian estimation library.
 //! Copyright (c) 2020 Michael Stevens
 //!

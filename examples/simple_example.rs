@@ -2,11 +2,11 @@
 //!
 //! A Kalman filter (estimator) with one state and constant noises.
 
-use nalgebra as na;
 use na::{Matrix1, Vector1};
+use nalgebra as na;
 
 use bayes_estimate::models::{
-    KalmanState, CorrelatedNoise, ExtendedLinearPredictor, ExtendedLinearObserver
+    CorrelatedNoise, ExtendedLinearObserver, ExtendedLinearPredictor, KalmanState
 };
 
 fn main() {

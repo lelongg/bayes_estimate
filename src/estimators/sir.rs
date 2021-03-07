@@ -67,14 +67,14 @@ pub type Resamples = Vec<u32>;
 pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>;
 
 /// A roughening function.
-pub type Roughener<N, D> = dyn FnMut(&mut Vec<VectorN<N, D>>, &mut dyn RngCore);
+pub type Roughener<N, D> = dyn FnMut(&mut Samples<N, D>, &mut dyn RngCore);
 
 
 impl<N: RealField, D: Dim> SampleState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn new_equal_likelihood(s: Vec<VectorN<N, D>>, rng: Box<dyn RngCore>) -> SampleState<N, D> {
+    pub fn new_equal_likelihood(s: Samples<N, D>, rng: Box<dyn RngCore>) -> SampleState<N, D> {
         let samples = s.len();
         SampleState {
             s,
@@ -108,9 +108,9 @@ where
         LikelihoodFn: Fn(&VectorN<N, D>) -> f32,
     {
         let mut wi = self.w.iter_mut();
-        for z in self.s.iter() {
+        for si in self.s.iter() {
             let w = wi.next().unwrap();
-            *w *= l(z);
+            *w *= l(si);
         }
     }
 
@@ -148,7 +148,7 @@ where
     /// Uses a in-place copying algorithm:
     /// First copy the live samples (those resampled) to end of s.
     /// Replicate live sample in-place start an the begining of s.
-    fn live_samples(s: &mut Vec<VectorN<N, D>>, resamples: &Resamples)
+    fn live_samples(s: &mut Samples<N, D>, resamples: &Resamples)
     {
         // reverse_copy_if live
         let mut si = s.len();
@@ -221,7 +221,7 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
     // Sorted uniform random distribution [0..1) for each resample
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
     let mut ur: Vec<f32> = uniform01.sample_iter(rng).take(w.len()).collect();
-    ur.sort_by(|a, b| a.total_cmp(&b));
+    ur.sort_by(|a, b| a.partial_cmp(b).unwrap());
     assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
 
     // Scale ur to cumulative sum
@@ -339,7 +339,7 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
 ///
 /// Numerics:
 ///  If the are very few unique samples the roughening will colapse as it is not representative of the true state distribution.
-pub fn roughen_minmax<N: RealField, D:Dim>(s: &mut Vec<VectorN<N, D>>, k: f32, rng: &mut dyn RngCore)
+pub fn roughen_minmax<N: RealField, D:Dim>(s: &mut Samples<N, D>, k: f32, rng: &mut dyn RngCore)
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
