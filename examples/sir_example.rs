@@ -20,7 +20,7 @@ fn main() {
     // Setup the initial position to be in a box 1000 by 1000
     let range1000 = rand_distr::Uniform::new(0., 1000.);
     let mut samples: sir::Samples<N, U2> = vec!();
-    for _i in 0..10000000 {
+    for _i in 0..10000 {
         samples.push(Vector2::new(rng.sample(range1000), rng.sample(range1000)))
     }
     // Assume any position in the box is initialy equally likely
