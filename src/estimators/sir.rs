@@ -135,7 +135,7 @@ where
         // Resample based on likelihoods
         let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
-        // select live sample and rougen
+        // select live sample and roughen
         SampleState::live_samples(&mut self.s, &resamples);
         roughener(&mut self.s, self.rng.as_mut()); // Roughen samples
 
@@ -161,6 +161,7 @@ where
             }
         }
         assert!(si == 0);
+
         // Replicate live samples
         si = 0;
         for pr in resamples {
@@ -178,7 +179,6 @@ where
         assert!(si == s.len());
         assert!(livei == s.len());
     }
-
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
@@ -228,20 +228,20 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
     ur.iter_mut().for_each(|el| *el *= lcum);
 
     // Resamples based on cumulative likelihood from sorted resample random values
-    let mut uri = ur.iter().cloned();
+    let mut uri = ur.iter();
     let mut urn = uri.next();
     let mut unique : u32 = 0;
     let mut resamples = Resamples::with_capacity(w.len());
 
-    for wi in w.iter().cloned() {
+    for wi in w.iter() {
         let mut res: u32 = 0;		// assume not resampled until find out otherwise
-        if (urn.is_some()) && urn.unwrap() < wi {
+        if (urn.is_some()) && *urn.unwrap() < *wi {
             unique += 1;
             loop {                        // count resamples
                 res += 1;
                 urn = uri.next();
                 if urn.is_none() { break; }
-                if !(urn.unwrap() < wi) { break;}
+                if !(*urn.unwrap() < *wi) { break;}
             }
         }
         resamples.push(res);
@@ -272,25 +272,26 @@ pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Resul
 {
     let (lmin, lcum) = cumaltive_likelihood(l)?;
 
-    // Stratified step
-    let lstep = lcum / l.len() as f32;
-
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
-    let ur = uniform01.sample(rng);
+
+    // Setup grid
+    let glen = l.len();
+    let gstep = lcum / glen as f32;
+    let goffset = uniform01.sample(rng) * gstep;		// random offset
 
     // Resamples based on cumulative likelihoods
-    let mut resamples = Resamples::with_capacity(l.len());
+    let mut resamples = Resamples::with_capacity(glen);
     let mut unique: u32 = 0;
-    let mut s = ur * lstep;		// random initialisation
 
+    let mut gi: u32 = 0;
     for li in l.iter() {
         let mut res: u32 = 0;		// assume not resampled until find out otherwise
-        if s < *li {
+        if (goffset + lcum * gi as f32  / glen as f32) < *li {
             unique += 1;
             loop {					// count resamples
                 res += 1;
-                s += lstep;
-                if !(s < *li) {break;}
+                gi += 1;
+                if !((goffset + lcum * gi as f32  / glen as f32) < *li) {break;}
             }
         }
         resamples.push(res);
