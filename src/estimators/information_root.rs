@@ -179,9 +179,6 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
         let mut Gqr = noise.G.clone();
 
         for qi in 0..noise.q.nrows() {
-            if noise.q[qi] < N::zero() {
-                return Result::Err("Predict q Not PSD");
-            }
             let mut ZZ = Gqr.column_mut(qi);
             ZZ *= N::sqrt(noise.q[qi]);
         }

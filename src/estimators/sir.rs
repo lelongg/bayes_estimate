@@ -390,7 +390,7 @@ impl<N: RealField, D: Dim> CorrelatedNoise<N, D>
         let udu = UDU::new();
         let rcond = udu.UCfactor_n(&mut uc, self.Q.nrows());
         check_non_negativ(rcond, "Q not PSD")?;
-        udu.Lzero(&mut uc);
+        uc.fill_lower_triangle(N::zero(), 1);
 
         // Sample from noise variance
         let noise_fn = move |rng: &mut dyn RngCore| -> VectorN<N,D> {

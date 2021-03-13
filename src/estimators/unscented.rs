@@ -15,6 +15,7 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, RealField, U1, VectorN, st
 use crate::models::KalmanState;
 use crate::noise::{CorrelatedNoise};
 use crate::linalg::rcond;
+use crate::matrix::quadform_tr_x;
 
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -77,16 +78,10 @@ impl<N: RealField, D: Dim> KalmanState<N, D>
         // Correlation of state with observation: Xxz
         // Center point, premult here by 2 for efficiency
         let x = &self.x;
-        let mut XZ;
-        {
-            let XX0 = &UU[0] - x;
-            XZ = XX0 * ZZ[0].transpose() * two * kappa;
-        }
-
+        let mut XZ = (&UU[0] - x) * ZZ[0].transpose() * two * kappa;
         // Remaining Unscented points
         for i in 1..ZZ.len() {
-            let XXi = (&UU[i] - x).clone_owned();
-            XZ += XXi * ZZ[i].transpose();
+            XZ += &(&UU[i] - x) * ZZ[i].transpose();
         }
         XZ /= two * x_kappa;
 
@@ -131,28 +126,21 @@ pub fn kalman<N: RealField, D: Dim>(state: &mut KalmanState<N, D>, XX: &Vec<Vect
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D> + Allocator<N, U1, D>
 {
     let two = N::from_u32(2).unwrap();
-    let half = N::one() / two;
 
     let x_scale = N::from_usize((XX.len() - 1) / 2).unwrap() + scale;
     // Mean of predicted distribution: x
-    state.x = &XX[0] * scale;
+    state.x = &XX[0] * two * scale;
     for i in 1..XX.len() {
-        state.x += XX[i].scale(half);
+        state.x += &XX[i];
     }
-    state.x /= x_scale;
+    state.x /= two * x_scale;
 
     // Covariance of distribution: X
     // Center point, premult here by 2 for efficiency
-    {
-        let XX0 = &XX[0] - &state.x;
-        let XX0t = XX0.transpose() * two * scale;
-        state.X = XX0 * XX0t;
-    }
+    quadform_tr_x(&mut state.X, two * scale, &(&XX[0] - &state.x), N::zero());
     // Remaining Unscented points
     for i in 1..XX.len() {
-        let XXi = &XX[i] - &state.x;
-        let XXit = XXi.transpose();
-        state.X += XXi * XXit;
+        quadform_tr_x(&mut state.X, N::one(), &(&XX[i] - &state.x), N::one());
     }
     state.X /= two * x_scale;
 }

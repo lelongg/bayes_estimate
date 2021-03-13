@@ -15,6 +15,7 @@ use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
 use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
 use nalgebra::{DimAdd, DimSum};
+use crate::matrix::copy_from;
 
 /// UD State representation.
 ///
@@ -175,19 +176,23 @@ impl<N: RealField, D: Dim> UDState<N, D>
             // Solve G* GIHx = Hx for GIHx in-place
             for j in 0..x_size {
                 for i in (0..z_size).rev() {
+                    let UDi = noise_factor.UD.row(i);
+                    let mut t = N::zero();
                     for k in i + 1..z_size {
-                        let t = noise_factor.UD[(i, k)] * GIHx[(k, j)];
-                        GIHx[(i, j)] -= t;
+                        t += UDi[k] * GIHx[(k, j)];
                     }
+                    GIHx[(i, j)] -= t;
                 }
             }
 
             // Solve G zp~ = z, G z~ = z  for zp~,z~ in-place
             for i in (0..z_size).rev() {
+                let UDi = noise_factor.UD.row(i);
                 for k in i + 1..z_size {
-                    let zpt = noise_factor.UD[(i, k)] * zp[k];
+                    let UDik = UDi[k];
+                    let zpt = UDik * zp[k];
                     zp[i] -= zpt;
-                    let zpdt = noise_factor.UD[(i, k)] * zpdecol[k];
+                    let zpdt = UDik * zpdecol[k];
                     zpdecol[i] -= zpdt;
                 }
             }
@@ -331,54 +336,46 @@ impl<N: RealField, D: Dim> UDState<N, D>
             D: DimAdd<QD>,
             DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
-        let n = self.x.nrows();
-        let Nq = q.nrows();
-        let NN = n + Nq;
+        let nx = self.x.nrows();
+        let nq = q.nrows();
+        let nxq = nx + nq;
 
         // Augment d with q, UD with G
-        for i in 0..Nq {
-            scratch.d[i + n] = q[i];
-        }
-        for j in 0..n {
-            for i in 0..Nq {
-                scratch.G[(j, i)] = G[(j, i)];
-            }
-        }
+        copy_from(&mut scratch.d.rows_range_mut(nx..nxq), q);
+        scratch.G.copy_from(G);
 
         // U=Fx*U and diagonals retrieved
-        for j in (1..n).rev() { // n-1..1
+        for j in (1..nx).rev() { // nx-1..1
             // Prepare d as temporary
-            for i in 0..=j { // 0..j
-                scratch.d[i] = self.UD[(i, j)];
-            }
+            let UDj = self.UD.column(j);
+            copy_from(&mut scratch.d.rows_range_mut(0..j+1), &UDj.rows_range(0..j+1));
 
             // Lower triangle of UD is implicitly empty
-            for i in 0..n {
-                self.UD[(i, j)] = Fx[(i, j)];
+            for i in 0..nx {
+                let mut t = Fx[(i, j)];
                 for k in 0..j {
-                    self.UD[(i, j)] += Fx[(i, k)] * scratch.d[k];
+                    t += Fx[(i, k)] * scratch.d[k];
                 }
+                self.UD[(i, j)] = t;
             }
         }
-        if n > 0 {
+        if nx > 0 {
             scratch.d[0] = self.UD[(0, 0)];
         }
 
         // Complete U = Fx*U
-        for j in 0..n {
-            self.UD[(j, 0)] = Fx[(j, 0)];
-        }
+        self.UD.column_mut(0).copy_from(&Fx.column(0));
 
         // The MWG-S algorithm on UD transpose
-        for j in (0..n).rev() { // n-1..0
+        for j in (0..nx).rev() { // n-1..0
             let mut e = self.udu.zero;
-            for k in 0..n {
+            for k in 0..nx {
                 scratch.v[k] = self.UD[(j, k)];
                 scratch.dv[k] = scratch.d[k] * scratch.v[k];
                 e += scratch.v[k] * scratch.dv[k];
             }
-            for k in n..NN {
-                scratch.v[k] = scratch.G[(j, k - n)];
+            for k in nx..nxq {
+                scratch.v[k] = scratch.G[(j, k - nx)];
                 scratch.dv[k] = scratch.d[k] * scratch.v[k];
                 e += scratch.v[k] * scratch.dv[k];
             }
@@ -390,20 +387,20 @@ impl<N: RealField, D: Dim> UDState<N, D>
                 let diaginv = self.udu.one / e;
                 for k in 0..j {
                     e = self.udu.zero;
-                    for i in 0..n {
+                    for i in 0..nx {
                         e += self.UD[(k, i)] * scratch.dv[i];
                     }
-                    for i in n..NN {
-                        e += scratch.G[(k, i - n)] * scratch.dv[i];
+                    for i in nx..nxq {
+                        e += scratch.G[(k, i - nx)] * scratch.dv[i];
                     }
                     e *= diaginv;
                     self.UD[(j, k)] = e;
 
-                    for i in 0..n {
+                    for i in 0..nx {
                         self.UD[(k, i)] -= e * scratch.v[i]
                     }
-                    for i in n..NN {
-                        scratch.G[(k, i - n)] -= e * scratch.v[i]
+                    for i in nx..nxq {
+                        scratch.G[(k, i - nx)] -= e * scratch.v[i]
                     }
                 }
             } else if e == self.udu.zero {
@@ -412,14 +409,14 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
                 // 1 / e is infinite
                 for k in 0..j {
-                    for i in 0..n {
+                    for i in 0..nx {
                         e = self.UD[(k, i)] * scratch.dv[i];
                         if e != self.udu.zero {
                             return self.udu.minus_one;
                         }
                     }
-                    for i in n..NN {
-                        e = scratch.G[(k, i - n)] * scratch.dv[i];
+                    for i in nx..nxq {
+                        e = scratch.G[(k, i - nx)] * scratch.dv[i];
                         if e != self.udu.zero {
                             return self.udu.minus_one;
                         }
@@ -433,12 +430,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
         } // MWG-S loop
 
         // Transpose and Zero lower triangle
-        for j in 1..n {
-            for i in 0..j {
-                self.UD[(i, j)] = self.UD[(j, i)];
-                self.UD[(j, i)] = self.udu.zero; // Zeroing unnecessary as lower only used as a scratch
-            }
-        }
+        self.UD.fill_upper_triangle_with_lower_triangle();
+        self.UD.fill_lower_triangle(N::zero(), 1);
 
         // Estimate the reciprocal condition number from upper triangular part
         UDU::UdUrcond(&self.UD)

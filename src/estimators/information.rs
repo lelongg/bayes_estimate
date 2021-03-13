@@ -133,10 +133,6 @@ where
         // B = G'*A*G+invQ , A in coupled additive noise space
         let mut B = (&A * &noise.G).tr_mul(&noise.G);
         for i in 0..noise.q.nrows() {
-            if noise.q[i] < N::zero() {
-                // allow PSD q, let infinity propagate into B
-                return Err("q not PSD");
-            }
             B[(i, i)] += N::one() / noise.q[i];
         }
 

@@ -34,6 +34,29 @@ pub fn quadform_tr<N: RealField, D1, S, R3, C3, S3, D4, S4>(
     }
 }
 
+/// Computes the quadratic form `self = alpha * lhs * lhs.transpose() + beta * self`.
+///
+/// there is no 'mid'.
+pub fn quadform_tr_x<N: RealField, D1, S, R3, C3, S3>(
+    mat: &mut SquareMatrix<N, D1, S>,
+    alpha: N,
+    lhs: &Matrix<N, R3, C3, S3>,
+    beta: N,
+) where
+    D1: Dim,
+    S: StorageMut<N, D1, D1>,
+    R3: Dim,
+    C3: Dim,
+    S3: Storage<N, R3, C3>,
+    ShapeConstraint: DimEq<D1, R3>,
+{
+    mat.ger(alpha, &lhs.column(0), &lhs.column(0), beta);
+
+    for j in 1..lhs.ncols() {
+        mat.ger(alpha, &lhs.column(j), &lhs.column(j), N::one());
+    }
+}
+
 pub fn as_zeros<N: RealField, R: Dim, C: Dim>(shape: (R, C)) -> MatrixMN<N, R, C>
 where
     DefaultAllocator: Allocator<N, R, C>,

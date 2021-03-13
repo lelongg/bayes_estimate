@@ -85,15 +85,15 @@ where
         hx: &MatrixMN<N, ZD, D>,
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str> {
-        let XHt = &self.X * hx.transpose();
+
         // S = Hx.X.Hx' + Q
-        let S = hx * &XHt + &noise.Q;
+        let mut S = noise.Q.clone();
+        S.quadform_tr(N::one(), hx, &self.X, N::one());
 
         // Inverse innovation covariance
         let SI = S.clone().cholesky().ok_or("S not PD in observe")?.inverse();
         // Kalman gain, X*Hx'*SI
-        let W = XHt * SI;
-
+        let W = &self.X * hx.transpose() * SI;
         // State update
         self.x += &W * s;
         // X -= W.S.W'

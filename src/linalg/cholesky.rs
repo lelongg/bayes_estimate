@@ -214,7 +214,7 @@ impl<N: RealField> UDU<N> {
             }
         }
 
-        self.Lzero(M);
+        M.fill_lower_triangle(self.zero, 1);
 
         // Estimate the reciprocal condition number
         self.UCrcond(M)
@@ -385,20 +385,6 @@ impl<N: RealField> UDU<N> {
                     M[(i, j)] += t; // M(i,k) element of U'd, M(k,j) element of U
                 }
                 M[(j, i)] = M[(i, j)];
-            }
-        }
-    }
-
-    /// Zero strict lower triangle of Matrix.
-    pub fn Lzero<R: Dim, C: Dim>(&self, M: &mut MatrixMN<N, R, C>)
-    where
-        DefaultAllocator: Allocator<N, R, C>,
-    {
-        let n = M.nrows();
-        assert_eq!(n, M.ncols());
-        for i in 1..n {
-            for j in 0..i {
-                M[(i, j)] = self.zero;
             }
         }
     }
