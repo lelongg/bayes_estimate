@@ -21,12 +21,12 @@ use bayes_estimate::cholesky::UDU;
 use bayes_estimate::estimators::information_root::InformationRootState;
 use bayes_estimate::estimators::sir;
 use bayes_estimate::estimators::sir::SampleState;
+use bayes_estimate::estimators::ud::CorrelatedFactorNoise;
 use bayes_estimate::models::{
     Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
     InformationState, KalmanEstimator, KalmanState, UDState,
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
-use bayes_estimate::estimators::ud::CorrelatedFactorNoise;
 
 #[test]
 fn test_covariance() {
@@ -79,22 +79,39 @@ fn test_sir() {
         let samples = vec![VectorN::<f64, U2>::zeros(); 10000];
         test_estimator(&mut TestSampleState {
             sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
-            systematic_resampler: false
+            systematic_resampler: false,
+            kalman_roughening: false
         });
         test_estimator(&mut TestSampleState {
             sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
-            systematic_resampler: true
+            systematic_resampler: true,
+            kalman_roughening: false
         });
     }
     {
         let samples = vec![DVector::zeros(2); 10000];
         test_estimator(&mut TestSampleState {
             sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
-            systematic_resampler: false
+            systematic_resampler: false,
+            kalman_roughening: false
         });
         test_estimator(&mut TestSampleState {
             sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
-            systematic_resampler: true
+            systematic_resampler: true,
+            kalman_roughening: false
+        });
+    }
+    {
+        let samples = vec![DVector::zeros(2); 10000];
+        test_estimator(&mut TestSampleState {
+            sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
+            systematic_resampler: false,
+            kalman_roughening: true
+        });
+        test_estimator(&mut TestSampleState {
+            sample: SampleState::new_equal_likelihood(samples.clone(), Box::new(rng.clone())),
+            systematic_resampler: true,
+            kalman_roughening: true
         });
     }
 }
@@ -391,6 +408,7 @@ struct TestSampleState<N: RealField, D: Dim>
 {
     sample: sir::SampleState<N, D>,
     systematic_resampler: bool,
+    kalman_roughening: bool
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for TestSampleState<N, D>
@@ -437,8 +455,8 @@ impl<D: Dim> TestEstimator<D> for TestSampleState<f64, D>
         noise: &CoupledNoise<f64, D, U1>)
     {
         // Predict amd sample the noise
-        let correlated_noise = CorrelatedNoise::from_coupled::<U1>(noise);
-        let sampler = sir::sampler(&correlated_noise).unwrap();
+        let coupled_with_q_one = CoupledNoise::from_correlated(&CorrelatedNoise::from_coupled::<U1>(noise)).unwrap();
+        let sampler = sir::noise_sampler_coupled(coupled_with_q_one.G);
         self.sample.predict_sampled(move |x: &VectorN<f64, D>, rng: &mut dyn RngCore| -> VectorN<f64, D> {
             f(&x) + sampler(rng)
         });
@@ -462,7 +480,7 @@ impl<D: Dim> TestEstimator<D> for TestSampleState<f64, D>
         };
         self.sample.observe(z_likelihood);
 
-        let mut resampler= if self.systematic_resampler {
+        let mut resampler = if self.systematic_resampler {
             |w: &mut sir::Likelihoods, rng: &mut dyn RngCore| {
                 sir::standard_resampler(w, rng)
             }
@@ -472,10 +490,22 @@ impl<D: Dim> TestEstimator<D> for TestSampleState<f64, D>
                 sir::systematic_resampler(w, rng)
             }
         };
-        let mut roughener = |s: &mut Vec<VectorN<f64, D>>, rng: &mut dyn RngCore| {
-            sir::roughen_minmax(s, 1., rng)
+
+        if self.kalman_roughening {
+            let noise = CoupledNoise::from_correlated(&CorrelatedNoise {
+                Q: self.kalman_state().unwrap().X
+            }).unwrap();
+            let mut roughener = move |s: &mut sir::Samples<f64, D>, rng: &mut dyn RngCore| {
+                sir::roughen_noise(s, &noise, 1., rng)
+            };
+            self.sample.update_resample(&mut resampler, &mut roughener)?;
+        }
+        else {
+            let mut roughener = |s: &mut sir::Samples<f64, D>, rng: &mut dyn RngCore| {
+                sir::roughen_minmax(s, 1., rng)
+            };
+            self.sample.update_resample(&mut resampler, &mut roughener)?;
         };
-        self.sample.update_resample(&mut resampler, &mut roughener)?;
 
         Ok(())
     }

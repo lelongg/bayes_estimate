@@ -25,14 +25,15 @@
 //!   likelihoods have a large range. Resampling becomes ill conditioned for these samples.
 
 
-use num_traits::{Float, Pow};
-use rand_core::RngCore;
-use rand_distr::{Distribution, StandardNormal, Uniform};
-
-use na::{DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
+use na::{DefaultAllocator, Dim, MatrixN, RealField, U1, VectorN};
 use na::allocator::Allocator;
 use na::storage::Storage;
 use nalgebra as na;
+use nalgebra::MatrixMN;
+use num_traits::Pow;
+use num_traits::real::Real;
+use rand_core::RngCore;
+use rand_distr::{Distribution, StandardNormal, Uniform};
 
 use crate::models::{Estimator, KalmanEstimator, KalmanState};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
@@ -134,11 +135,13 @@ where
         // Resample based on likelihoods
         let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
-        // select live sample and roughen
+        // Select live sample
         SampleState::live_samples(&mut self.s, &resamples);
-        roughener(&mut self.s, self.rng.as_mut()); // Roughen samples
+        // Resampling results in uniform likelihoods
+        self.w.fill(1.);
 
-        self.w.fill(1.);        // Resampling results in uniform likelihoods
+        // Roughen samples
+        roughener(&mut self.s, self.rng.as_mut());
 
         Ok((unqiue_samples, lcond))
     }
@@ -329,9 +332,9 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
     Ok((lmin, lcum))
 }
 
-/// Min max roughening.
+/// Roughen sample state using min max roughening of the samples.
 ///
-/// Uses algorithm from Ref[1].
+/// Uses algorithm from Ref[1] which applies then the states have a singe locality but the distribution is unknown.
 /// max-min in each state dimension in the samples determines the amount of normally distrubuted noise added to that
 /// dimension for each sample.
 ///
@@ -345,13 +348,11 @@ where
 {
     let x_dim = s[0].data.shape().0;
     let x_size = x_dim.value();
-    // Scale sigma by constant and state dimensions
-    let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
 
     // Find min and max state dimension in all states
     let mut xmin = s[0].clone();
     let mut xmax = xmin.clone();
-    for si in s.iter_mut() {		// Loop includes 0 to simplify code
+    for si in s.iter() {		// Loop includes 0 to simplify code
         let mut mini = xmin.iter_mut();
         let mut maxi = xmax.iter_mut();
 
@@ -363,34 +364,66 @@ where
             if *xd > *maxx {*maxx = *xd;}
         }
     }
-    // Roughening st.dev from scaled max-min
+    // Roughening st.dev from scaled max-min and state dimensions
+    let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
     let sigma = (xmax - xmin) * N::from_f32(sigma_scale).unwrap();
-    // Apply additive normally distributed noise to  to each state b
+    let noise = noise_sampler(sigma);
+
     for si in s.iter_mut() {
-        // normally distribute noise with std dev determined by sigma for that dimension
-        let normal = StandardNormal.sample_iter(&mut *rng).map(|n| {N::from_f32(n).unwrap()});
-        let mut nr = VectorN::<N, D>::from_iterator_generic(x_dim, U1, normal.take(x_size));
-        for (ni, n) in nr.iter_mut().enumerate() {
-            *n *= sigma[ni];
-        }
-        // add noise
-        *si += nr;
+        *si += noise(&mut *rng);
     }
 }
 
-/// Generate as samping functiion for CorrelatedNoise.
-pub fn sampler<'s, N: RealField, D: Dim>(correlated: &'s CorrelatedNoise<N, D>) -> Result<impl Fn(&mut dyn RngCore) -> VectorN<N,D> + 's, &'static str>
+/// Couple noise roughening.
+///
+/// The roughening is scaled by the deviation of the noise.
+///
+/// 'k' is scaling factor for normally distributed noise
+pub fn roughen_noise<N: RealField, D: Dim, ND: Dim>(s: &mut Samples<N, D>, noise: &CoupledNoise<N, D, ND>, k: f32, rng: &mut dyn RngCore)
     where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ND> + Allocator<N, ND, ND> + Allocator<N, D> + Allocator<N, ND>
+{
+    // Roughening st.dev from scaled  and state dimensions
+    let sigma_scale = N::from_f32(k * f32::pow(s.len() as f32, -1f32/(noise.G.nrows() as f32))).unwrap();
+    let mut coupling = noise.G.clone();
+    for (i, mut c) in coupling.column_iter_mut().enumerate() {
+        c *= sigma_scale * noise.q[i];
+    }
+    let noise = noise_sampler_coupled(coupling);
+
+    for si in s.iter_mut() {
+        *si += noise(&mut *rng);
+    }
+}
+
+/// Generate as samping function for normally distributed noise.
+///
+/// 'std_dev' standard deviation of normally distributed noise.
+pub fn noise_sampler<N: RealField, D: Dim>(std_dev: VectorN<N, D>) -> impl Fn(&mut dyn RngCore) -> VectorN<N,D>
+    where
+        DefaultAllocator: Allocator<N, D>,
 {
     // Sample with the coupled noise deviation
-    let coupled_noise = CoupledNoise::from_correlated(&correlated)?;
-    let noise_fn = move |rng: &mut dyn RngCore| -> VectorN<N,D> {
-        let rnormal = StandardNormal.sample_iter(rng).map(|n| {N::from_f32(n).unwrap()}).take(correlated.Q.nrows());
-        let n = VectorN::<N, D>::from_iterator_generic(correlated.Q.data.shape().0, U1, rnormal);
-        &coupled_noise.G * n
-    };
-    Ok(noise_fn)
+    move |rng: &mut dyn RngCore| -> VectorN<N,D> {
+        let rnormal = StandardNormal.sample_iter(rng)
+            .enumerate()
+            .map(|(i, n): (usize, f32)| {N::from_f32(n).unwrap() * std_dev[i]}).
+            take(std_dev.nrows());
+        VectorN::from_iterator_generic(std_dev.data.shape().0, U1, rnormal)
+    }
+}
+
+/// Generate as sampling function for normally distributed coupled noise.
+pub fn noise_sampler_coupled<N: RealField, D: Dim, ND: Dim>(coupleing: MatrixMN<N, D, ND>) -> impl Fn(&mut dyn RngCore) -> VectorN<N,D>
+    where
+        DefaultAllocator: Allocator<N, D, ND> + Allocator<N, D> + Allocator<N, ND>,
+{
+    // Sample with the coupled noise deviation
+    move |rng: &mut dyn RngCore| -> VectorN<N,D> {
+        let rnormal = StandardNormal.sample_iter(rng).map(|n: f32| {N::from_f32(n).unwrap()}).take(coupleing.ncols());
+        let n = VectorN::from_iterator_generic(coupleing.data.shape().1, U1, rnormal);
+        &coupleing * n
+    }
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
@@ -401,8 +434,8 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
         for s in self.s.iter_mut() {
             s.copy_from(&state.x);
         }
-        let noise = CorrelatedNoise { Q: state.X.clone() };
-        let sampler = sampler(&noise)?;
+        let coupled_noise = CoupledNoise::from_correlated(&CorrelatedNoise { Q: state.X.clone() })?;
+        let sampler = noise_sampler_coupled(coupled_noise.G);
         self.predict_sampled(move |x: &VectorN<N,D>, rng: &mut dyn RngCore| -> VectorN<N,D> {
             x + sampler(rng)
         });
