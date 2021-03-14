@@ -17,7 +17,6 @@ use nalgebra as na;
 use num_traits::pow;
 use rand::RngCore;
 
-use bayes_estimate::cholesky::UDU;
 use bayes_estimate::estimators::information_root::InformationRootState;
 use bayes_estimate::estimators::sir;
 use bayes_estimate::estimators::sir::SampleState;
@@ -317,10 +316,7 @@ impl<D: DimAdd<U1>> TestEstimator<D> for TestUDState<f64, D>
             let noise_single = UncorrelatedNoise::<f64, U1> { q: Vector1::new(noise.Q[0]) };
             self.ud.observe_innovation::<U1>(s, hx, &noise_single).map(|_rcond| {})
         } else {
-            let udu = UDU::new();
-            let mut ud: MatrixMN<f64, U1, U1> = noise.Q.clone_owned();
-            udu.UdUfactor_variant2(&mut ud, z.nrows());
-            let noise_fac = CorrelatedFactorNoise::<f64, U1> { UD: ud };
+            let noise_fac = CorrelatedFactorNoise::from_correlated(&noise)?;
             let h_normalize = |_h: &mut VectorN<f64, U1>, _h0: &VectorN<f64, U1>| {};
             self.ud.observe_linear_correlated::<U1>(z, hx, h_normalize, &noise_fac).map(|_rcond| {})
         }

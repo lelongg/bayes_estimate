@@ -93,7 +93,7 @@ impl<N: RealField, D: Dim> CoupledNoise<N, D, D>
     /// The CorrelatedNoise must be PSD.
     /// The resulting 'q' is always a vector of 1s.
     pub fn from_correlated(correlated: &CorrelatedNoise<N, D>) -> Result<Self, &'static str> {
-        // Factorise the corralted noise
+        // Factorise the correlated noise
         let mut uc = correlated.Q.clone();
         let udu = UDU::new();
         let rcond = udu.UCfactor_n(&mut uc, correlated.Q.nrows());
@@ -105,5 +105,4 @@ impl<N: RealField, D: Dim> CoupledNoise<N, D, D>
             G: uc
         })
     }
-
 }

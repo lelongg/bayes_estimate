@@ -13,9 +13,9 @@ use na::{Dim, RealField, U1, MatrixMN, MatrixN, VectorN};
 use crate::linalg::cholesky::UDU;
 use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
-use crate::noise::{UncorrelatedNoise, CoupledNoise};
+use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedNoise};
 use nalgebra::{DimAdd, DimSum};
-use crate::matrix::copy_from;
+use crate::matrix::{copy_from, check_non_negativ};
 
 
 /// UD State representation.
@@ -134,8 +134,8 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
     fn kalman_state(&self) -> Result<KalmanState<N, D>, &'static str> {
         // assign elements of common left block of M into X
         let x_shape = self.x.data.shape().0;
-        let mut X = matrix::as_zeros((x_shape, x_shape));
-        matrix::copy_from(&mut X, &self.UD.columns(0, self.UD.nrows()));
+
+        let mut X = self.UD.columns_generic(0, x_shape).into_owned();
         UDU::UdUrecompose(&mut X);
 
         Ok(KalmanState { x: self.x.clone(), X })
@@ -151,6 +151,22 @@ pub struct CorrelatedFactorNoise<N: RealField, D: Dim>
 {
     /// Noise covariance
     pub UD: MatrixN<N, D>
+}
+
+impl<N: RealField, D: Dim> CorrelatedFactorNoise<N, D>
+    where
+        DefaultAllocator: Allocator<N, D, D>,
+{
+    /// Creates a CorrelatedFactorNoise from an CorrelatedNoise.
+    /// The CorrelatedNoise must be PSD.
+    pub fn from_correlated(correlated: &CorrelatedNoise<N, D>) -> Result<Self, &'static str> {
+        let udu = UDU::new();
+        let mut ud: MatrixN<N, D> = correlated.Q.clone_owned();
+        let rcond = udu.UdUfactor_variant2(&mut ud, correlated.Q.nrows());
+        check_non_negativ(rcond, "Q not PSD")?;
+
+        Ok(CorrelatedFactorNoise{ UD: ud })
+    }
 }
 
 impl<N: RealField, D: Dim> UDState<N, D>
@@ -264,21 +280,22 @@ impl<N: RealField, D: Dim> UDState<N, D>
             D: DimAdd<QD>,
             DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>
     {
-        let ud_col_vec_shape = (self.UD.data.shape().1.add(qd), U1);
+        // x + qd rows
+        let xqd_size = self.UD.data.shape().1.add(qd);
         PredictScratch {
-            G: matrix::as_zeros((self.UD.data.shape().0, qd)),
-            d: matrix::as_zeros(ud_col_vec_shape),
-            dv: matrix::as_zeros(ud_col_vec_shape),
-            v: matrix::as_zeros(ud_col_vec_shape),
+            G: MatrixMN::zeros_generic(self.UD.data.shape().0, qd),
+            d: VectorN::zeros_generic(xqd_size, U1),
+            dv: VectorN::zeros_generic(xqd_size, U1),
+            v: VectorN::zeros_generic(xqd_size, U1),
         }
     }
 
     pub fn new_observe_scratch(&self) -> ObserveScratch<N, D> {
-        let x_vec_shape = self.x.data.shape();
+        let x_size = self.x.data.shape().0;
         ObserveScratch {
-            w: matrix::as_zeros(x_vec_shape),
-            a: matrix::as_zeros(x_vec_shape),
-            b: matrix::as_zeros(x_vec_shape),
+            w: VectorN::zeros_generic(x_size, U1),
+            a: VectorN::zeros_generic(x_size, U1),
+            b: VectorN::zeros_generic(x_size, U1),
         }
     }
 

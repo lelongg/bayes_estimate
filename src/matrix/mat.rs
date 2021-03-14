@@ -1,8 +1,5 @@
 use na::storage::{Storage, StorageMut};
-use na::{
-    allocator::Allocator, DefaultAllocator, Dim, Matrix, MatrixMN, RealField, Scalar, SquareMatrix,
-    Vector,
-};
+use na::{Dim, Matrix, RealField, Scalar, SquareMatrix, Vector};
 use nalgebra as na;
 use nalgebra::constraint::{DimEq, ShapeConstraint};
 
@@ -53,13 +50,6 @@ pub fn quadform_tr_x<N: RealField, D1, S, R3, C3, S3>(
     for j in 1..lhs.ncols() {
         mat.ger(alpha, &lhs.column(j), &lhs.column(j), N::one());
     }
-}
-
-pub fn as_zeros<N: RealField, R: Dim, C: Dim>(shape: (R, C)) -> MatrixMN<N, R, C>
-where
-    DefaultAllocator: Allocator<N, R, C>,
-{
-    MatrixMN::zeros_generic(shape.0, shape.1)
 }
 
 pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(
