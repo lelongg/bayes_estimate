@@ -25,7 +25,8 @@ use bayes_estimate::models::{
     Estimator, ExtendedLinearObserver, ExtendedLinearPredictor,
     InformationState, KalmanEstimator, KalmanState, UDState,
 };
-use bayes_estimate::noise::{CorrelatedFactorNoise, CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
+use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
+use bayes_estimate::estimators::ud::CorrelatedFactorNoise;
 
 #[test]
 fn test_covariance() {
@@ -437,7 +438,7 @@ impl<D: Dim> TestEstimator<D> for TestSampleState<f64, D>
     {
         // Predict amd sample the noise
         let correlated_noise = CorrelatedNoise::from_coupled::<U1>(noise);
-        let sampler = correlated_noise.sampler().unwrap();
+        let sampler = sir::sampler(&correlated_noise).unwrap();
         self.sample.predict_sampled(move |x: &VectorN<f64, D>, rng: &mut dyn RngCore| -> VectorN<f64, D> {
             f(&x) + sampler(rng)
         });

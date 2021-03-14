@@ -8,10 +8,11 @@ use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN
 use na::SimdRealField;
 use na::storage::Storage;
 use nalgebra as na;
+use nalgebra::{RealField, U1};
 
+use crate::cholesky::UDU;
 use crate::matrix;
-use nalgebra::RealField;
-use crate::matrix::MatrixUDU;
+use crate::matrix::check_non_negativ;
 
 /// Additive noise.
 ///
@@ -37,20 +38,9 @@ pub struct CorrelatedNoise<N: SimdRealField, D: Dim>
 
 /// Additive noise.
 ///
-/// Noise represented as a the noise covariance as a factorised UdU' matrix.
-pub struct CorrelatedFactorNoise<N: SimdRealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D>
-{
-    /// Noise covariance
-    pub UD: MatrixUDU<N, D>
-}
-
-/// Additive noise.
-///
 /// Noise represented as a the noise variance vector and a noise coupling matrix.
 /// The noise covariance is G.q.G'.
-pub struct CoupledNoise<N: SimdRealField, D: Dim, QD: Dim>
+pub struct CoupledNoise<N: RealField, D: Dim, QD: Dim>
     where
         DefaultAllocator: Allocator<N, D, QD> + Allocator<N, QD>,
 {
@@ -93,4 +83,27 @@ where
 
         correlated
     }
+}
+
+impl<N: RealField, D: Dim> CoupledNoise<N, D, D>
+    where
+        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+{
+    /// Creates a CoupledNoise from an CorrelatedNoise.
+    /// The CorrelatedNoise must be PSD.
+    /// The resulting 'q' is always a vector of 1s.
+    pub fn from_correlated(correlated: &CorrelatedNoise<N, D>) -> Result<Self, &'static str> {
+        // Factorise the corralted noise
+        let mut uc = correlated.Q.clone();
+        let udu = UDU::new();
+        let rcond = udu.UCfactor_n(&mut uc, correlated.Q.nrows());
+        check_non_negativ(rcond, "Q not PSD")?;
+        uc.fill_lower_triangle(N::zero(), 1);
+
+        Ok(CoupledNoise {
+            q: VectorN::repeat_generic(uc.data.shape().0, U1, N::one()),
+            G: uc
+        })
+    }
+
 }

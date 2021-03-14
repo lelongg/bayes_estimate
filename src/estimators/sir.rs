@@ -34,10 +34,8 @@ use na::allocator::Allocator;
 use na::storage::Storage;
 use nalgebra as na;
 
-use crate::cholesky::UDU;
-use crate::matrix::{check_non_negativ};
 use crate::models::{Estimator, KalmanEstimator, KalmanState};
-use crate::noise::CorrelatedNoise;
+use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 /// Sample state.
 ///
@@ -380,27 +378,19 @@ where
     }
 }
 
-impl<N: RealField, D: Dim> CorrelatedNoise<N, D>
+/// Generate as samping functiion for CorrelatedNoise.
+pub fn sampler<'s, N: RealField, D: Dim>(correlated: &'s CorrelatedNoise<N, D>) -> Result<impl Fn(&mut dyn RngCore) -> VectorN<N,D> + 's, &'static str>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-    pub fn sampler<'s>(&'s self) -> Result<impl Fn(&mut dyn RngCore) -> VectorN<N,D> + 's, &'static str>
-    {
-        // Decorrelate state noise
-        let mut uc = self.Q.clone();
-        let udu = UDU::new();
-        let rcond = udu.UCfactor_n(&mut uc, self.Q.nrows());
-        check_non_negativ(rcond, "Q not PSD")?;
-        uc.fill_lower_triangle(N::zero(), 1);
-
-        // Sample from noise variance
-        let noise_fn = move |rng: &mut dyn RngCore| -> VectorN<N,D> {
-            let rnormal = StandardNormal.sample_iter(rng).map(|n| {N::from_f32(n).unwrap()}).take(self.Q.nrows());
-            let n = VectorN::<N, D>::from_iterator_generic(self.Q.data.shape().0, U1, rnormal);
-            &uc * n
-        };
-        Ok(noise_fn)
-    }
+    // Sample with the coupled noise deviation
+    let coupled_noise = CoupledNoise::from_correlated(&correlated)?;
+    let noise_fn = move |rng: &mut dyn RngCore| -> VectorN<N,D> {
+        let rnormal = StandardNormal.sample_iter(rng).map(|n| {N::from_f32(n).unwrap()}).take(correlated.Q.nrows());
+        let n = VectorN::<N, D>::from_iterator_generic(correlated.Q.data.shape().0, U1, rnormal);
+        &coupled_noise.G * n
+    };
+    Ok(noise_fn)
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
@@ -412,7 +402,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
             s.copy_from(&state.x);
         }
         let noise = CorrelatedNoise { Q: state.X.clone() };
-        let sampler = noise.sampler()?;
+        let sampler = sampler(&noise)?;
         self.predict_sampled(move |x: &VectorN<N,D>, rng: &mut dyn RngCore| -> VectorN<N,D> {
             x + sampler(rng)
         });

@@ -13,9 +13,10 @@ use na::{Dim, RealField, U1, MatrixMN, MatrixN, VectorN};
 use crate::linalg::cholesky::UDU;
 use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
-use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedFactorNoise};
+use crate::noise::{UncorrelatedNoise, CoupledNoise};
 use nalgebra::{DimAdd, DimSum};
 use crate::matrix::copy_from;
+
 
 /// UD State representation.
 ///
@@ -28,6 +29,8 @@ pub struct UDState<N: RealField, D: Dim>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
+
+
     /// State vector
     pub x: VectorN<N, D>,
     /// UD matrix representation of state covariance
@@ -137,6 +140,17 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
 
         Ok(KalmanState { x: self.x.clone(), X })
     }
+}
+
+/// Additive noise.
+///
+/// Noise represented as a the noise covariance as a factorised UdU' matrix.
+pub struct CorrelatedFactorNoise<N: RealField, D: Dim>
+    where
+        DefaultAllocator: Allocator<N, D, D>
+{
+    /// Noise covariance
+    pub UD: MatrixN<N, D>
 }
 
 impl<N: RealField, D: Dim> UDState<N, D>
