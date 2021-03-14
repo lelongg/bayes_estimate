@@ -1,5 +1,5 @@
 use na::storage::{Storage, StorageMut};
-use na::{Dim, Matrix, RealField, Scalar, SquareMatrix, Vector};
+use na::{Dim, Matrix, RealField, SquareMatrix, Vector};
 use nalgebra as na;
 use nalgebra::constraint::{DimEq, ShapeConstraint};
 
@@ -49,30 +49,6 @@ pub fn quadform_tr_x<N: RealField, D1, S, R3, C3, S3>(
 
     for j in 1..lhs.ncols() {
         mat.ger(alpha, &lhs.column(j), &lhs.column(j), N::one());
-    }
-}
-
-pub fn copy_from<N, R1, C1, SB1, R2, C2, SB2>(
-    this: &mut Matrix<N, R1, C1, SB1>,
-    other: &Matrix<N, R2, C2, SB2>,
-) where
-    N: Scalar + Copy,
-    R1: Dim,
-    C1: Dim,
-    SB1: StorageMut<N, R1, C1>,
-    R2: Dim,
-    C2: Dim,
-    SB2: Storage<N, R2, C2>,
-{
-    assert!(
-        this.shape() == other.shape(),
-        "Unable to copy from a matrix with a different shape."
-    );
-
-    for j in 0..this.ncols() {
-        for i in 0..this.nrows() {
-            this[(i, j)] = other[(i, j)];
-        }
     }
 }
 

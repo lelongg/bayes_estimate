@@ -15,7 +15,7 @@ use crate::matrix;
 use crate::models::{KalmanEstimator, KalmanState, Estimator};
 use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedNoise};
 use nalgebra::{DimAdd, DimSum};
-use crate::matrix::{copy_from, check_non_negativ};
+use crate::matrix::{check_non_negativ};
 
 
 /// UD State representation.
@@ -121,7 +121,7 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
 
         // Factorise X into UD
         let rows = self.UD.nrows();
-        matrix::copy_from(&mut self.UD.columns_mut(0, rows), &state.X);
+        self.UD.copy_from(&state.X);
         let rcond = self.udu.UdUfactor_variant2(&mut self.UD, rows);
         matrix::check_non_negativ(rcond, "X not PSD")?;
 
@@ -370,14 +370,14 @@ impl<N: RealField, D: Dim> UDState<N, D>
         let nxq = nx + nq;
 
         // Augment d with q, UD with G
-        copy_from(&mut scratch.d.rows_range_mut(nx..nxq), q);
+        scratch.d.rows_generic_mut(nx, q.data.shape().0).copy_from(q);
         scratch.G.copy_from(G);
 
         // U=Fx*U and diagonals retrieved
         for j in (1..nx).rev() { // nx-1..1
             // Prepare d as temporary
             let UDj = self.UD.column(j);
-            copy_from(&mut scratch.d.rows_range_mut(0..j+1), &UDj.rows_range(0..j+1));
+            scratch.d.rows_range_mut(0..j+1).copy_from(&UDj.rows_range(0..j+1));
 
             // Lower triangle of UD is implicitly empty
             for i in 0..nx {

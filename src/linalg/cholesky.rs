@@ -189,7 +189,7 @@ impl<N: RealField> UDU<N> {
             // Diagonal element
             if d > self.zero {
                 // Positive definite
-                d = N::sqrt(d);
+                d = d.sqrt();
                 M[(j, j)] = d;
                 d = self.one / d;
 
