@@ -1,6 +1,6 @@
 [package]
 name = "bayes_estimate"
-version = "0.7.5"
+version = "0.7.6"
 authors = ["Michael Stevens <mail@michael-stevens.de>"]
 edition = "2018"
 description = "Bayesian estimation library. Kalman filter, Informatiom, Square root, Information root, Unscented and UD filters. Numerically and dimensionally generic implementation using nalgebra. Provides fast numerically stable estimation solutions."
