@@ -16,7 +16,7 @@ use crate::linalg::cholesky::UDU;
 use crate::models::{KalmanState, InformationState, KalmanEstimator, ExtendedLinearObserver, Estimator};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 use crate::linalg::cholesky;
-use crate::matrix::{check_positive, copy_from};
+use crate::matrix::{check_positive};
 
 /// Information State.
 ///
@@ -180,25 +180,26 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
 
         for qi in 0..noise.q.nrows() {
             let mut ZZ = Gqr.column_mut(qi);
-            ZZ *= N::sqrt(noise.q[qi]);
+            ZZ *= noise.q[qi].sqrt();
         }
 
         // Form Augmented matrix for factorisation
-        let x_size = x_pred.nrows();
-        let q_size = noise.q.nrows();
-        let RFxI: MatrixMN<N, D, D> = &self.R * fx_inv;
-
         let dqd = noise.G.data.shape().0.add(noise.q.data.shape().0);
         let mut A = MatrixMN::identity_generic(dqd, dqd); // Prefill with identity for top left and zero's in off diagonals
+        let RFxI: MatrixMN<N, D, D> = &self.R * fx_inv;
         let x: MatrixMN<N, D, QD> = &RFxI * &Gqr;
-        copy_from(&mut A.slice_mut((q_size, 0), (x_size, q_size)), &x);
-        copy_from(&mut A.slice_mut((q_size, q_size), (x_size, x_size)), &RFxI);
+        let x_size = x_pred.data.shape().0;
+        let q_size = noise.q.data.shape().0;
+        A.generic_slice_mut((q_size.value(), 0), (x_size, q_size)).copy_from(&x);
+        A.generic_slice_mut((q_size.value(), q_size.value()), (x_size, x_size)).copy_from(&RFxI);
+        A.generic_slice_mut((q_size.value(), 0), (x_size, q_size)).copy_from(&x);
+        A.generic_slice_mut((q_size.value(), q_size.value()), (x_size, x_size)).copy_from(&RFxI);
 
         // Calculate factorisation so we have and upper triangular R
         let qr = QR::new(A);
         // Extract the roots
         let r = qr.r();
-        copy_from(&mut self.R, &r.slice((q_size, q_size), (x_size, x_size)));
+        self.R.copy_from(&r.generic_slice((q_size.value(), q_size.value()), (x_size, x_size)));
 
         self.r = &self.R * x_pred;    // compute r from x_pred
 
@@ -218,20 +219,20 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
             DimSum<D, ZD>: DimMin<DimSum<D, U1>>,
             DefaultAllocator: Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>> + Allocator<N, DimMinimum<DimSum<D, ZD>, DimSum<D, U1>>, DimSum<D, U1>>
     {
-        let x_size = self.r.nrows();
-        let z_size = z.nrows();
+        let x_size = self.r.data.shape().0;
+        let z_size = z.data.shape().0;
         // Size consistency, z to model
-        if z_size != hx.nrows() {
+        if z_size != hx.data.shape().0 {
             return Result::Err("observation and model size inconsistent");
         }
 
         // Form Augmented matrix for factorisation
         let xd = self.r.data.shape().0;
         let mut A = MatrixMN::identity_generic(xd.add(z.data.shape().0), xd.add(U1));  // Prefill with identity for top left and zero's in off diagonals
-        copy_from(&mut A.slice_mut((0, 0), (x_size, x_size)), &self.R);
-        copy_from(&mut A.slice_mut((0, x_size), (x_size, 1)), &self.r);
-        copy_from(&mut A.slice_mut((x_size, 0), (z_size, x_size)),&(noise_inv * hx));
-        copy_from(&mut A.slice_mut((x_size, x_size),(z_size,1)),&(noise_inv * z));
+        A.generic_slice_mut((0, 0), (x_size, x_size)).copy_from(&self.R);
+        A.generic_slice_mut((0, x_size.value()), (x_size, U1)).copy_from(&self.r);
+        A.generic_slice_mut((x_size.value(), 0), (z_size, x_size)).copy_from(&(noise_inv * hx));
+        A.generic_slice_mut((x_size.value(), x_size.value()), (z_size, U1)).copy_from(&(noise_inv * z));
 
         // Calculate factorisation so we have and upper triangular R
         let qr = QR::new(A);
@@ -239,8 +240,8 @@ impl<N: RealField, D: Dim> InformationRootState<N, D>
         let r = qr.r();
 
         // Extract the roots
-        copy_from(&mut self.R, &r.slice((0, 0), (x_size, x_size)));
-        copy_from(&mut self.r, &r.slice((0, x_size), (x_size,1)));
+        self.R.copy_from(&r.generic_slice((0, 0), (x_size, x_size)));
+        self.r.copy_from(&r.generic_slice((0, x_size.value()), (x_size, U1)));
 
         Result::Ok(())
     }
