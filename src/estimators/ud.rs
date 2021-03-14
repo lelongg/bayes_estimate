@@ -93,8 +93,6 @@ impl<N: RealField, D: Dim> UDState<N, D>
             DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
     {
         let mut scratch = self.new_observe_scratch();
-
-        // Predict UD from model
         UDState::observe_innovation_use_scratch(self, &mut scratch, s, hx, noise)
     }
 }

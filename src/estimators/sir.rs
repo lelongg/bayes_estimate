@@ -83,15 +83,16 @@ where
         }
     }
 
-    /// Predict state using a state prediction function 'f'.
+    /// Predict sample state using a state prediction function 'f'.
     pub fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>)
     {
-        // Predict particles s using supplied prediction function
         self.s.iter_mut().for_each(|el|{
             el.copy_from(&f(el))
         });
     }
 
+    /// Predict sample state using a sampled state prediction function 'f'.
+    /// The sampling function should predict the state and sample any noise.
     pub fn predict_sampled(&mut self, f: impl Fn(&VectorN<N, D>, &mut dyn RngCore) -> VectorN<N, D>)
     {
         // Predict particles s using supplied prediction function
