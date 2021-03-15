@@ -1,7 +1,9 @@
-use bayes_estimate::models::{UDState, InformationState, KalmanState};
 use nalgebra::{MatrixN, U2, Vector2};
-use bayes_estimate::models::KalmanEstimator;
+
 use bayes_estimate::estimators::information_root::InformationRootState;
+use bayes_estimate::estimators::ud::UDState;
+use bayes_estimate::models::{InformationState, KalmanState};
+use bayes_estimate::models::KalmanEstimator;
 
 #[test]
 fn test_init_matches_state() {

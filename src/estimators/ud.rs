@@ -29,8 +29,6 @@ pub struct UDState<N: RealField, D: Dim>
     where
         DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
-
-
     /// State vector
     pub x: VectorN<N, D>,
     /// UD matrix representation of state covariance
@@ -203,24 +201,25 @@ impl<N: RealField, D: Dim> UDState<N, D>
         {
             // Solve G* GIHx = Hx for GIHx in-place
             for j in 0..x_size {
+                let mut GIHx_j = GIHx.column_mut(j);
                 for i in (0..z_size).rev() {
-                    let UDi = noise_factor.UD.row(i);
+                    let UD_i = noise_factor.UD.row(i);
                     let mut t = N::zero();
                     for k in i + 1..z_size {
-                        t += UDi[k] * GIHx[(k, j)];
+                        t += UD_i[k] * GIHx_j[k];
                     }
-                    GIHx[(i, j)] -= t;
+                    GIHx_j[i] -= t;
                 }
             }
 
             // Solve G zp~ = z, G z~ = z  for zp~,z~ in-place
             for i in (0..z_size).rev() {
-                let UDi = noise_factor.UD.row(i);
+                let UD_i = noise_factor.UD.row(i);
                 for k in i + 1..z_size {
-                    let UDik = UDi[k];
-                    let zpt = UDik * zp[k];
+                    let UD_ik = UD_i[k];
+                    let zpt = UD_ik * zp[k];
                     zp[i] -= zpt;
-                    let zpdt = UDik * zpdecol[k];
+                    let zpdt = UD_ik * zpdecol[k];
                     zpdecol[i] -= zpdt;
                 }
             }
@@ -365,8 +364,10 @@ impl<N: RealField, D: Dim> UDState<N, D>
             D: DimAdd<QD>,
             DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
-        let nx = self.x.nrows();
-        let nq = q.nrows();
+        let nx_ = self.x.data.shape().0;
+        let nx = nx_.value();
+        let nq_ = q.data.shape().0;
+        let nq = nq_.value();
         let nxq = nx + nq;
 
         // Augment d with q, UD with G
@@ -376,16 +377,14 @@ impl<N: RealField, D: Dim> UDState<N, D>
         // U=Fx*U and diagonals retrieved
         for j in (1..nx).rev() { // nx-1..1
             // Prepare d as temporary
-            let UDj = self.UD.column(j);
-            scratch.d.rows_range_mut(0..j+1).copy_from(&UDj.rows_range(0..j+1));
+            let mut UD_j = self.UD.column_mut(j);
+            scratch.d.rows_range_mut(0..j+1).copy_from(&UD_j.rows_range(0..j+1));
 
             // Lower triangle of UD is implicitly empty
+            let Fx_j = Fx.column(j);
+            let ds = &scratch.d.rows_range(0..j);
             for i in 0..nx {
-                let mut t = Fx[(i, j)];
-                for k in 0..j {
-                    t += Fx[(i, k)] * scratch.d[k];
-                }
-                self.UD[(i, j)] = t;
+                UD_j[i] = Fx_j[i] + Fx.row(i).columns_range(0..j).dot(ds);
             }
         }
         if nx > 0 {
@@ -397,16 +396,27 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
         // The MWG-S algorithm on UD transpose
         for j in (0..nx).rev() { // n-1..0
+            let G_j = scratch.G.row(j);
             let mut e = self.udu.zero;
-            for k in 0..nx {
-                scratch.v[k] = self.UD[(j, k)];
-                scratch.dv[k] = scratch.d[k] * scratch.v[k];
-                e += scratch.v[k] * scratch.dv[k];
+            scratch.v.rows_generic_mut(0, nx_).tr_copy_from(&self.UD.row(j));
+
+            let mut vi = scratch.v.iter_mut();
+            let mut di = scratch.d.iter();
+            for dv in &mut scratch.dv.rows_generic_mut(0, nx_) {
+                let v = *vi.next().unwrap();
+                let d = *di.next().unwrap();
+                *dv =  d * v;
+                e += v * *dv;
             }
-            for k in nx..nxq {
-                scratch.v[k] = scratch.G[(j, k - nx)];
-                scratch.dv[k] = scratch.d[k] * scratch.v[k];
-                e += scratch.v[k] * scratch.dv[k];
+            let matrix = G_j.columns_generic(0, nq_);
+            let mut gi = matrix.into_iter();
+            for dv in &mut scratch.dv.rows_generic_mut(nx, nq_) {
+                let v = vi.next().unwrap();
+                let d = *di.next().unwrap();
+                let g = *gi.next().unwrap();
+                *v = g;
+                *dv = d * *v;
+                e += *v * *dv;
             }
             // Check diagonal element
             if e > self.udu.zero {
@@ -415,21 +425,19 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
                 let diaginv = self.udu.one / e;
                 for k in 0..j {
-                    e = self.udu.zero;
-                    for i in 0..nx {
-                        e += self.UD[(k, i)] * scratch.dv[i];
-                    }
-                    for i in nx..nxq {
-                        e += scratch.G[(k, i - nx)] * scratch.dv[i];
-                    }
+                    let mut G_k = scratch.G.row_mut(k);
+                    e = self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
+                      + G_k.columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(0, nq_));
                     e *= diaginv;
                     self.UD[(j, k)] = e;
 
-                    for i in 0..nx {
-                        self.UD[(k, i)] -= e * scratch.v[i]
+                    let mut UD_k = self.UD.row_mut(k);
+                    let mut vi = scratch.v.iter();
+                    for UD_ki in UD_k.iter_mut() {
+                        *UD_ki -= e * *vi.next().unwrap();
                     }
-                    for i in nx..nxq {
-                        scratch.G[(k, i - nx)] -= e * scratch.v[i]
+                    for G_ki in G_k.iter_mut() {
+                        *G_ki -= e * *vi.next().unwrap();
                     }
                 }
             } else if e == self.udu.zero {
@@ -438,6 +446,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
                 // 1 / e is infinite
                 for k in 0..j {
+
                     for i in 0..nx {
                         e = self.UD[(k, i)] * scratch.dv[i];
                         if e != self.udu.zero {
@@ -488,10 +497,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
         // Compute b = DU'h, a = U'h
         for j in (1..n).rev() { // n-1..1
-            for k in 0..j {
-                let t = self.UD[(k, j)] * scratch.a[k];
-                scratch.a[j] += t;
-            }
+            let t = self.UD.column(j).rows_range(0..j).dot(&scratch.a.rows_range(0..j));
+            scratch.a[j] += t;
             scratch.b[j] = self.UD[(j, j)] * scratch.a[j];
         }
         scratch.b[0] = self.UD[(0, 0)] * scratch.a[0];
@@ -505,6 +512,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
         self.UD[(0, 0)] *= q * gamma;
         // Update rest of UD and gain b
         for j in 1..n {
+            let mut UD_j = self.UD.column_mut(j);
             // d modification
             let alpha_jm1 = *alpha; // alpha at j-1
             *alpha += scratch.b[j] * scratch.a[j];
@@ -513,11 +521,11 @@ impl<N: RealField, D: Dim> UDState<N, D>
                 return self.udu.minus_one;
             }
             gamma = self.udu.one / *alpha;
-            self.UD[(j, j)] *= alpha_jm1 * gamma;
+            UD_j[j] *= alpha_jm1 * gamma;
             // U modification
             for i in 0..j {
-                let UD_jm1 = self.UD[(i, j)];
-                self.UD[(i, j)] = UD_jm1 + lamda * scratch.b[i];
+                let UD_jm1 = UD_j[i];
+                UD_j[i] = UD_jm1 + lamda * scratch.b[i];
                 let t = scratch.b[j] * UD_jm1;
                 scratch.b[i] += t;
             }
