@@ -45,7 +45,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
     ///
     /// D is the size of states vector and rows in UD.
     pub fn new(UD: MatrixN<N, D>, x: VectorN<N, D>) -> Self {
-        assert!(x.nrows() == UD.nrows(), "x rows must be == UD rows");
+        assert_eq!(x.nrows(), UD.nrows(), "x rows must be == UD rows");
 
         UDState {
             UD,

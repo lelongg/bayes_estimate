@@ -117,7 +117,7 @@ where
     /// Observe sample likehoods directly.
     /// The sample likelihoods are multiplied by these likelihoods.
     pub fn observe_likelihood(&mut self, l: Likelihoods) {
-        assert!(self.w.len() == l.len());
+        assert_eq!(self.w.len(), l.len());
         let mut li = l.iter();
         for wi in self.w.iter_mut() {
             *wi *= li.next().unwrap();
@@ -162,7 +162,7 @@ where
                 s[livei] = s[si].clone();
             }
         }
-        assert!(si == 0);
+        assert_eq!(si, 0);
 
         // Replicate live samples
         si = 0;
@@ -178,8 +178,8 @@ where
                 livei += 1;
             }
         }
-        assert!(si == s.len());
-        assert!(livei == s.len());
+        assert_eq!(si, s.len());
+        assert_eq!(livei, s.len());
     }
 }
 
