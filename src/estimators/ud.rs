@@ -367,8 +367,6 @@ impl<N: RealField, D: Dim> UDState<N, D>
         let nx_ = self.x.data.shape().0;
         let nx = nx_.value();
         let nq_ = q.data.shape().0;
-        let nq = nq_.value();
-        let nxq = nx + nq;
 
         // Augment d with q, UD with G
         scratch.d.rows_generic_mut(nx, q.data.shape().0).copy_from(q);
@@ -376,8 +374,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
         // U=Fx*U and diagonals retrieved
         for j in (1..nx).rev() { // nx-1..1
-            // Prepare d as temporary
             let mut UD_j = self.UD.column_mut(j);
+            // Prepare d as temporary
             scratch.d.rows_range_mut(0..j+1).copy_from(&UD_j.rows_range(0..j+1));
 
             // Lower triangle of UD is implicitly empty
@@ -396,70 +394,54 @@ impl<N: RealField, D: Dim> UDState<N, D>
 
         // The MWG-S algorithm on UD transpose
         for j in (0..nx).rev() { // n-1..0
-            let G_j = scratch.G.row(j);
             let mut e = self.udu.zero;
-            scratch.v.rows_generic_mut(0, nx_).tr_copy_from(&self.UD.row(j));
 
             let mut vi = scratch.v.iter_mut();
             let mut di = scratch.d.iter();
-            for dv in &mut scratch.dv.rows_generic_mut(0, nx_) {
-                let v = *vi.next().unwrap();
-                let d = *di.next().unwrap();
-                *dv =  d * v;
-                e += v * *dv;
-            }
-            let matrix = G_j.columns_generic(0, nq_);
-            let mut gi = matrix.into_iter();
-            for dv in &mut scratch.dv.rows_generic_mut(nx, nq_) {
+
+            let UD_j = self.UD.row(j);
+            let G_j = scratch.G.row(j);
+            let mut udgi = UD_j.iter().chain(G_j.iter());
+            for dv in &mut scratch.dv {
                 let v = vi.next().unwrap();
                 let d = *di.next().unwrap();
-                let g = *gi.next().unwrap();
-                *v = g;
+                *v = *udgi.next().unwrap();
                 *dv = d * *v;
                 e += *v * *dv;
             }
+
             // Check diagonal element
             if e > self.udu.zero {
                 // Positive definite
                 self.UD[(j, j)] = e;
-
                 let diaginv = self.udu.one / e;
+
                 for k in 0..j {
-                    let mut G_k = scratch.G.row_mut(k);
-                    e = self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
-                      + G_k.columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(0, nq_));
+                    e =     self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
+                        + scratch.G.row(k).columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(nx, nq_));
                     e *= diaginv;
                     self.UD[(j, k)] = e;
 
-                    let mut UD_k = self.UD.row_mut(k);
                     let mut vi = scratch.v.iter();
-                    for UD_ki in UD_k.iter_mut() {
-                        *UD_ki -= e * *vi.next().unwrap();
-                    }
-                    for G_ki in G_k.iter_mut() {
-                        *G_ki -= e * *vi.next().unwrap();
+
+                    let mut UD_k = self.UD.row_mut(k);
+                    let mut G_k = scratch.G.row_mut(k);
+                    for udg in UD_k.iter_mut().chain(G_k.iter_mut()) {
+                        *udg -= e * *vi.next().unwrap();
                     }
                 }
             } else if e == self.udu.zero {
                 // Possibly semi-definite, check not negative
                 self.UD[(j, j)] = e;
+                // diaginv = 1 / e
 
-                // 1 / e is infinite
                 for k in 0..j {
-
-                    for i in 0..nx {
-                        e = self.UD[(k, i)] * scratch.dv[i];
-                        if e != self.udu.zero {
+                    e =     self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
+                        + scratch.G.row(k).columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(nx, nq_));
+                    if e != self.udu.zero {
                             return self.udu.minus_one;
-                        }
                     }
-                    for i in nx..nxq {
-                        e = scratch.G[(k, i - nx)] * scratch.dv[i];
-                        if e != self.udu.zero {
-                            return self.udu.minus_one;
-                        }
-                    }
-                    // UD(j,k) unaffected
+                    // UD and G are unchanged as e == 0
                 }
             } else {
                 // Negative
