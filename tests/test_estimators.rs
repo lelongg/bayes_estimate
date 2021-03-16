@@ -29,6 +29,12 @@ fn test_covariance() {
 }
 
 #[test]
+fn test_covariance_rheta() {
+    rtheta::test_estimator(&mut KalmanState::new_zero(U3));
+    rtheta::test_estimator(&mut KalmanState::new_zero(Dynamic::new(3)));
+}
+
+#[test]
 fn test_information() {
     simple::test_estimator(&mut InformationState::new_zero(U2));
     simple::test_estimator(&mut InformationState::new_zero(Dynamic::new(2)));
@@ -147,7 +153,7 @@ pub mod simple {
     const OBS_NOISE: f64 = 0.1;
 
     /// Simple prediction model.
-    fn fx<D: super::Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
+    fn f<D: super::Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
         where
             DefaultAllocator: Allocator<f64, D>,
     {
@@ -160,13 +166,15 @@ pub mod simple {
     }
 
     /// Simple observation model.
-    fn hx<D: Dim>(x: &VectorN<f64, D>) -> Vector1<f64>
+    fn h<D: Dim>(x: &VectorN<f64, D>) -> Vector1<f64>
         where
             DefaultAllocator: Allocator<f64, D>,
     {
         Vector1::new(x[0])
     }
 
+    fn h_normalize(_z: &mut VectorN<f64, U1>, _z0: &VectorN<f64, U1>)
+    {}
 
     /// Numerically test the estimation operations of a TestEstimator.
     ///
@@ -207,20 +215,20 @@ pub mod simple {
 
         for _c in 0..2 {
             let predict_x = est.state().unwrap();
-            let predict_xp = fx(&predict_x);
-            est.predict_fn(&predict_xp, fx, &linear_pred_model, &additive_noise);
+            let predict_xp = f(&predict_x);
+            est.predict_fn(&predict_xp, f, &linear_pred_model, &additive_noise);
             let pp = KalmanEstimator::kalman_state(est).unwrap();
             println!("pred={:.6}{:.6}", pp.x, pp.X);
             est.trace_state();
 
-            est.observe(&z, hx, &linear_obs_model, &co_obs_noise).unwrap();
+            est.observe(&z, h, h_normalize, &linear_obs_model, &co_obs_noise).unwrap();
 
             let oo = est.kalman_state().unwrap();
             println!("obs={:.6}{:.6}", oo.x, oo.X);
             est.trace_state();
         }
 
-        est.observe(&z, hx, &linear_obs_model, &co_obs_noise).unwrap();
+        est.observe(&z, h, h_normalize, &linear_obs_model, &co_obs_noise).unwrap();
 
         let xx = est.kalman_state().unwrap();
         println!("final={:.6}{:.6}", xx.x, xx.X);
@@ -260,15 +268,9 @@ pub mod rtheta {
     use nalgebra::MatrixMN;
 
     const NOISE_MODEL: bool = true;
-    // Add noise to truth model
-    const TRUTH_STATIONARY: bool = false;
-    // Truth model setup
-    const INIT_XY: [f64; 2] = [1., -0.2];
-    // XY initial position
-    const TARGET: [f64; 2] = [-11., 0.];    // XY position of target
 
     const RANGE_NOISE: f64 = if NOISE_MODEL { 0.1 } else { 1e-6 };
-    const ANGLE_NOISE: f64 = if NOISE_MODEL { 5f64 * PI / 180. } else { 1e-6 };
+    const ANGLE_NOISE: f64 = if NOISE_MODEL { 0.1f64 * PI / 180. } else { 1e-6 };
     const Z_CORRELATION: f64 = 0e-1;    // (Un)Correlated observation model
 
     // predict model
@@ -279,10 +281,13 @@ pub mod rtheta {
 
     const INIT_X_NOISE: f64 = 0.07;
     const INIT_Y_NOISE: f64 = 0.10;
-    const INIT_XY_NOISE_CORRELATION: f64 = 0.4;
+    const INIT_XY_NOISE_CORRELATION: f64 = 0.; //0.4;
     const INIT_2_NOISE: f64 = 0.09;
     // Use zero for singular X
-    const INIT_2_NOISE_CORRELATION: f64 = 0.5;
+    const INIT_Y2_NOISE_CORRELATION: f64 = 0.5;
+
+    // XY position of target - this is chosen so the observation angle is discontinues at -pi/+pi
+    const TARGET: [f64; 2] = [-11., 0.];
 
     /// Coupled prediction model.
     fn f<D: super::Dim>(x: &VectorN<f64, D>) -> VectorN<f64, D>
@@ -304,18 +309,23 @@ pub mod rtheta {
         let dx = TARGET[0] - x[0];
         let dy = TARGET[1] - x[1];
 
-        Vector2::new((dx * dx + dy * dy).sqrt(), (dx * dx + dy * dy).sqrt())
+        Vector2::new((dx * dx + dy * dy).sqrt(), dy.atan2(dx))
     }
 
-    fn h_normalize(z: &mut Vector2<f64>)
+    fn normalize_angle(a: &mut f64, a0: f64)
     {
-        let mut a = z[1] % 2. * PI;
-        if a >= PI {
-            a -= 2. * PI
-        } else if a < -PI {
-            a += 2. * PI
+        let mut d = (*a - a0) % 2.*PI;
+        if d >= PI {
+            d -= 2.*PI
+        } else if d < -PI {
+            d += 2.*PI
         }
-        z[1] = a;
+        *a += d;
+    }
+
+    fn h_normalize(z: &mut VectorN<f64, U2>, z0: &VectorN<f64,  U2>)
+    {
+        normalize_angle(&mut z[1], z0[1]);
     }
 
     fn hx<D: Dim>(x: &VectorN<f64, D>) -> MatrixMN<f64, U2, D>
@@ -366,17 +376,18 @@ pub mod rtheta {
             Q: Matrix2::new(RANGE_NOISE.powi(2), RANGE_NOISE * ANGLE_NOISE * Z_CORRELATION, RANGE_NOISE * ANGLE_NOISE * Z_CORRELATION, ANGLE_NOISE.powi(2)),
         };
 
-        let truth = Vector2::new(INIT_XY[0], INIT_XY[1]);
+        // True position
+        let mut truth = Vector2::new(1., 0.);
 
         const INIT_XY_CORRELATION: f64 = INIT_X_NOISE * INIT_Y_NOISE * INIT_XY_NOISE_CORRELATION;
-        const INIT_X2_CORRELATION: f64 = INIT_X_NOISE * INIT_2_NOISE * INIT_2_NOISE_CORRELATION;
-        const INIT_Y2_CORRELATION: f64 = INIT_Y_NOISE * INIT_2_NOISE * INIT_2_NOISE_CORRELATION;
+        const INIT_Y2_CORRELATION: f64 = INIT_Y_NOISE * INIT_2_NOISE * INIT_Y2_NOISE_CORRELATION;
         let init_state: KalmanState<f64, D> = KalmanState {
-            x: new_copy(d, U1, Vector3::new(INIT_XY[0], INIT_XY[1], 0.)),
+            // Choose initial y so that the estimated position should pass through 0 and thus the observed angle be discontinues
+            x: new_copy(d, U1, Vector3::new(1., -0.2, 0.0)),
             X: new_copy(d, d, Matrix3::new(
-                INIT_X_NOISE.powi(2), INIT_XY_CORRELATION, INIT_X2_CORRELATION,
+                INIT_X_NOISE.powi(2), INIT_XY_CORRELATION, 0.,
                 INIT_XY_CORRELATION, INIT_Y_NOISE.powi(2), INIT_Y2_CORRELATION,
-                INIT_X2_CORRELATION, INIT_XY_CORRELATION, INIT_2_NOISE.powi(2))),
+                0., INIT_Y2_CORRELATION, INIT_2_NOISE.powi(2))),
         };
 
         est.init(&init_state).unwrap();
@@ -395,17 +406,20 @@ pub mod rtheta {
 
             let z = h(&truth);
             let hx = hx(&pp.x);
-            est.observe(&z, h, &hx, &co_obs_noise).unwrap();
+            est.observe(&z, h, h_normalize, &hx, &co_obs_noise).unwrap();
 
             let oo = est.kalman_state().unwrap();
             println!("obs={:.6}{:.6}", oo.x, oo.X);
             est.trace_state();
+
+            // Jump the true postion back an forth around the y axis, making the observes angle discontinues
+            // truth[1] = -truth[1]
         }
 
         let est_state = Estimator::state(est).unwrap();
         let z = h(&truth);
         let hx = hx(&est_state);
-        est.observe(&z, h, &hx, &co_obs_noise).unwrap();
+        est.observe(&z, h, h_normalize, &hx, &co_obs_noise).unwrap();
 
         let xx = est.kalman_state().unwrap();
         println!("final={:.6}{:.6}", xx.x, xx.X);

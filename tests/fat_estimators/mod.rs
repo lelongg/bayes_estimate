@@ -27,8 +27,9 @@ use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
 
 /// Define the estimator operations to be tested.
 pub trait FatEstimator<D: Dim, QD: Dim, ZD: Dim>: Estimator<f64, D> + KalmanEstimator<f64, D>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, U1, D> + Allocator<f64, D>
-    + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>
+    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+    + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+    + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>
 {
     fn dim(&self) -> D {
         return Estimator::state(self).unwrap().data.shape().0;
@@ -55,6 +56,7 @@ pub trait FatEstimator<D: Dim, QD: Dim, ZD: Dim>: Estimator<f64, D> + KalmanEsti
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>;
@@ -63,8 +65,11 @@ pub trait FatEstimator<D: Dim, QD: Dim, ZD: Dim>: Estimator<f64, D> + KalmanEsti
 /// Test covariance estimator operations defined on a KalmanState.
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for KalmanState<f64, D>
     where
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, D> + Allocator<f64, U1, D>
-        + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
+    // observe_innovation
+        DefaultAllocator: Allocator<f64, D, ZD>
 {
     fn predict_fn(
         &mut self,
@@ -80,11 +85,10 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for KalmanState<f64, D>
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
-        // where
-        //     DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
         ExtendedLinearObserver::observe_innovation(self, &(z - h(&self.x)), hx, noise)
     }
@@ -92,8 +96,12 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for KalmanState<f64, D>
 
 /// Test information estimator operations defined on a InformationState.
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationState<f64, D>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, U1, D> + Allocator<f64, D>
-    + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
+    where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
+    // observe_innovation
+        DefaultAllocator: Allocator<f64, D, ZD>
 {
     fn dim(&self) -> D {
         return self.i.data.shape().0;
@@ -113,11 +121,10 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationState<f64,
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
-        // where
-        //     DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>,
     {
         let s = z - h(&self.state().unwrap());
         ExtendedLinearObserver::observe_innovation(self, &s, hx, noise)?;
@@ -128,23 +135,26 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationState<f64,
 /// Test information estimator operations defined on a InformationRootState.
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationRootState<f64, D>
     where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
         DimSum<D, U1>: DimMin<DimSum<D, U1>>,
         DefaultAllocator: Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>> + Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>, DimSum<D, U1>>
         + Allocator<usize, D, D>,
 
-        // InformationRootState
+    // InformationRootState
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
 
-        // FatEstimator
+    // FatEstimator
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, U1, D> + Allocator<f64, D>
-            + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
+        + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
 
-        // predict
+    // predict
         D: DimAdd<QD>,
         DefaultAllocator: Allocator<f64, DimSum<D, QD>, DimSum<D, QD>> + Allocator<f64, DimSum<D, QD>> + Allocator<f64, D, QD> + Allocator<f64, QD>,
         DimSum<D, QD>: DimMin<DimSum<D, QD>>,
         DefaultAllocator: Allocator<f64, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>> + Allocator<f64, DimMinimum<DimSum<D, QD>, DimSum<D, QD>>, DimSum<D, QD>>,
-        // observe
+    // observe
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, ZD, ZD> + Allocator<f64, D> + Allocator<f64, ZD>,
         D: DimAdd<ZD> + DimAdd<U1>,
         DefaultAllocator: Allocator<f64, DimSum<D, ZD>, DimSum<D, U1>> + Allocator<f64, DimSum<D, ZD>>,
@@ -173,6 +183,7 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationRootState<
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
@@ -215,8 +226,9 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for FatUDState<N, D>
 }
 
 impl<D: DimAdd<U1>, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUDState<f64, D>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, U1, D> + Allocator<f64, D>
-    + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>
+    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+    + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+    + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>
     + Allocator<f64, D, DimSum<D, U1>> + Allocator<f64, DimSum<D, U1>> + Allocator<usize, D, D>,
           D: DimAdd<QD>,
           DefaultAllocator: Allocator<f64, DimSum<D, QD>, U1>
@@ -240,6 +252,7 @@ impl<D: DimAdd<U1>, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUDState<f64
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
@@ -299,10 +312,18 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for FatUnscentedState<N, D>
 }
 
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUnscentedState<f64, D>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, D> + Allocator<f64, U1, D>
-    + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, ZD> + Allocator<f64, U1, ZD>+ Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
-          DefaultAllocator: Allocator<usize, D, D>,
-          DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>, DefaultAllocator: Allocator<f64, D, U1>
+    where
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
+        // predict_unscented
+        DefaultAllocator: Allocator<f64, U1, D>,
+        // observe_unscented
+        DefaultAllocator: Allocator<f64, D, ZD>,
+        DefaultAllocator: Allocator<f64, U1, ZD>,
+        //
+        DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>, DefaultAllocator: Allocator<f64, D, U1>,
+        DefaultAllocator: Allocator<usize, D, D>,
 {
     fn trace_state(&self) {
         println!("{:}", self.kalman.X);
@@ -322,10 +343,10 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUnscentedState<f64
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         _hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
-        let h_normalize = |_h: &mut VectorN<f64, ZD>, _h0: &VectorN<f64, ZD>| {};
         let s = &(z - h(&self.state().unwrap()));
         self.kalman.observe_unscented(h, h_normalize, noise, s, self.kappa)
     }
@@ -362,10 +383,13 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for FatSampleState<N, D>
 
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D>
     where
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, ZD, D> + Allocator<f64, U1, D> + Allocator<f64, D>
-        + Allocator<f64, QD, QD> + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, ZD> + Allocator<f64, D, QD> + Allocator<f64, QD> + Allocator<f64, ZD>,
-        // determinate
-        ZD: DimMin<ZD, Output = ZD>,
+        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
+    // sample
+        DefaultAllocator: Allocator<f64, U1, D>,
+    // determinate
+        ZD: DimMin<ZD, Output=ZD>,
         DefaultAllocator: Allocator<(usize, usize), ZD>
 {
     fn trace_state(&self) {
@@ -399,6 +423,7 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
         &mut self,
         z: &VectorN<f64, ZD>,
         h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
         _hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
