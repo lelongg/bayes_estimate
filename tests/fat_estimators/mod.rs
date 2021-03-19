@@ -135,12 +135,8 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationState<f64,
 /// Test information estimator operations defined on a InformationRootState.
 impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for InformationRootState<f64, D>
     where
-        DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
-        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
-        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
-        DimSum<D, U1>: DimMin<DimSum<D, U1>>,
-        DefaultAllocator: Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>> + Allocator<f64, DimMinimum<DimSum<D, U1>, DimSum<D, U1>>, DimSum<D, U1>>
-        + Allocator<usize, D, D>,
+    // display
+        DefaultAllocator: Allocator<usize, D, D>,
 
     // InformationRootState
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>,
@@ -226,13 +222,14 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for FatUDState<N, D>
 }
 
 impl<D: DimAdd<U1>, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUDState<f64, D>
-    where DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
-    + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
-    + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>
-    + Allocator<f64, D, DimSum<D, U1>> + Allocator<f64, DimSum<D, U1>> + Allocator<usize, D, D>,
-          D: DimAdd<QD>,
-          DefaultAllocator: Allocator<f64, DimSum<D, QD>, U1>
-
+    where
+        DefaultAllocator: Allocator<usize, D, D>
+        + Allocator<f64, D, D> + Allocator<f64, D>
+        + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
+        + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>
+        + Allocator<f64, D, DimSum<D, U1>>,
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<f64, DimSum<D, QD>, U1>
 {
     fn trace_state(&self) {
         println!("{}", self.ud.UD);
@@ -316,12 +313,12 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatUnscentedState<f64
         DefaultAllocator: Allocator<f64, D, D> + Allocator<f64, D>
         + Allocator<f64, QD, QD> + Allocator<f64, D, QD> + Allocator<f64, QD>
         + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
-        // predict_unscented
+    // predict_unscented
         DefaultAllocator: Allocator<f64, U1, D>,
-        // observe_unscented
+    // observe_unscented
         DefaultAllocator: Allocator<f64, D, ZD>,
         DefaultAllocator: Allocator<f64, U1, ZD>,
-        //
+    //
         DefaultAllocator: Allocator<f64, U1, U1> + Allocator<f64, U1>, DefaultAllocator: Allocator<f64, D, U1>,
         DefaultAllocator: Allocator<usize, D, D>,
 {
@@ -388,9 +385,6 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
         + Allocator<f64, ZD, ZD> + Allocator<f64, ZD, D> + Allocator<f64, ZD>,
     // sample
         DefaultAllocator: Allocator<f64, U1, D>,
-    // determinate
-        ZD: DimMin<ZD, Output=ZD>,
-        DefaultAllocator: Allocator<(usize, usize), ZD>
 {
     fn trace_state(&self) {
         // println!("{:?}\n{:?}", self.w, self.s);
@@ -428,8 +422,10 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
     {
-        let zinv = noise.Q.clone().cholesky().unwrap().inverse();
-        let logdetz = noise.Q.determinant().ln() as f32;
+        // Observation Likihood for correlated Gaussian noise
+        let cholesky = noise.Q.clone().cholesky().unwrap();
+        let zinv = cholesky.inverse();
+        let logdetz = cholesky.l().diagonal().iter().product::<f64>().ln() as f32;
 
         let z_likelihood = |x: &VectorN<f64, D>| -> f32 {
             let innov = z - h(x);
