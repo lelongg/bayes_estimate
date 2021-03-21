@@ -24,6 +24,9 @@ use bayes_estimate::models::{
     InformationState, KalmanEstimator, KalmanState,
 };
 use bayes_estimate::noise::{CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
+use nalgebra::{Matrix, Scalar};
+use nalgebra::iter::MatrixIter;
+use std::iter::StepBy;
 
 /// Define the estimator operations to be tested.
 pub trait FatEstimator<D: Dim, QD: Dim, ZD: Dim>: Estimator<f64, D> + KalmanEstimator<f64, D>
@@ -407,7 +410,7 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
     {
         // Predict amd sample the noise
         let coupled_with_q_one = CoupledNoise::from_correlated(&CorrelatedNoise::from_coupled::<QD>(noise)).unwrap();
-        let sampler = sir::noise_sampler_coupled(coupled_with_q_one.G);
+        let sampler = sir::normal_noise_sampler_coupled(coupled_with_q_one.G);
         self.sample.predict_sampled(move |x: &VectorN<f64, D>, rng: &mut dyn RngCore| -> VectorN<f64, D> {
             f(&x) + sampler(rng)
         });
@@ -422,17 +425,7 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
     {
-        // Observation Likihood for correlated Gaussian noise
-        let cholesky = noise.Q.clone().cholesky().unwrap();
-        let zinv = cholesky.inverse();
-        let logdetz = cholesky.l().diagonal().iter().product::<f64>().ln() as f32;
-
-        let z_likelihood = |x: &VectorN<f64, D>| -> f32 {
-            let innov = z - h(x);
-            let logl = innov.dot(&(&zinv * &innov)) as f32;
-            (-0.5 * (logl + logdetz)).exp()
-        };
-        self.sample.observe(z_likelihood);
+        self.sample.observe(sir::gaussian_observation_likelihood(z, h, noise));
 
         let mut resampler = if self.systematic_resampler {
             |w: &mut sir::Likelihoods, rng: &mut dyn RngCore| {
@@ -461,4 +454,16 @@ impl<D: Dim, QD: Dim, ZD: Dim> FatEstimator<D, QD, ZD> for FatSampleState<f64, D
 
         Ok(())
     }
+}
+
+trait Diagonal<N: Scalar, R: Dim, C: Dim, S: Storage<N,R,C>> {
+    fn diagonal_iter(&self) -> StepBy<MatrixIter<N, R, C, S>>;
+}
+
+impl<N: Scalar, R: Dim, C: Dim, S: Storage<N,R,C>> Diagonal<N,R,C,S> for Matrix<N,R,C,S>
+{
+    fn diagonal_iter(&self) -> StepBy<MatrixIter<N, R, C, S>> {
+        self.iter().step_by(self.nrows()+1)
+    }
+
 }
