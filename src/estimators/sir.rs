@@ -137,7 +137,7 @@ where
         let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
         // Select live sample
-        SampleState::live_samples(&mut self.s, &resamples);
+        live_samples(&mut self.s, &resamples);
         // Resampling results in uniform likelihoods
         self.w.fill(1.);
 
@@ -147,41 +147,6 @@ where
         Ok((unqiue_samples, lcond))
     }
 
-    /// Update 's' by selectively copying resamples.
-    /// Uses a in-place copying algorithm:
-    /// First copy the live samples (those resampled) to end of s.
-    /// Replicate live sample in-place start an the begining of s.
-    pub fn live_samples(s: &mut Samples<N, D>, resamples: &Resamples)
-    {
-        // reverse_copy_if live
-        let mut si = s.len();
-        let mut livei = si;
-        for pr in resamples.iter().rev() {
-            si -= 1;
-            if *pr > 0 {
-                livei -= 1;
-                s[livei] = s[si].clone();
-            }
-        }
-        assert_eq!(si, 0);
-
-        // Replicate live samples
-        si = 0;
-        for pr in resamples {
-            let mut res = *pr;
-            if res > 0 {
-                loop {
-                    s[si] = s[livei].clone();
-                    si += 1;
-                    res -= 1;
-                    if res == 0 { break; }
-                }
-                livei += 1;
-            }
-        }
-        assert_eq!(si, s.len());
-        assert_eq!(livei, s.len());
-    }
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
@@ -331,6 +296,44 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
         return Err("NaN cumulative likelihood sum");
     }
     Ok((lmin, lcum))
+}
+
+/// Update 's' by selectively copying resamples.
+/// Uses a in-place copying algorithm:
+/// First copy the live samples (those resampled) to end of s.
+/// Replicate live sample in-place start an the begining of s.
+pub fn live_samples<N: RealField, D:Dim>(s: &mut Samples<N, D>, resamples: &Resamples)
+    where
+        DefaultAllocator: Allocator<N, D>,
+{
+    // reverse_copy_if live
+    let mut si = s.len();
+    let mut livei = si;
+    for pr in resamples.iter().rev() {
+        si -= 1;
+        if *pr > 0 {
+            livei -= 1;
+            s[livei] = s[si].clone();
+        }
+    }
+    assert_eq!(si, 0);
+
+    // Replicate live samples
+    si = 0;
+    for pr in resamples {
+        let mut res = *pr;
+        if res > 0 {
+            loop {
+                s[si] = s[livei].clone();
+                si += 1;
+                res -= 1;
+                if res == 0 { break; }
+            }
+            livei += 1;
+        }
+    }
+    assert_eq!(si, s.len());
+    assert_eq!(livei, s.len());
 }
 
 /// Roughen sample state using min max roughening of the samples.
