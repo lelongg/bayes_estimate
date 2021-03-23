@@ -73,6 +73,7 @@ impl<N: RealField, D: Dim> SampleState<N, D>
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
+    /// Creates a [SampleState] with equal likelihood weights.
     pub fn new_equal_likelihood(s: Samples<N, D>, rng: Box<dyn RngCore>) -> SampleState<N, D> {
         let samples = s.len();
         SampleState {
@@ -150,7 +151,7 @@ where
     /// Uses a in-place copying algorithm:
     /// First copy the live samples (those resampled) to end of s.
     /// Replicate live sample in-place start an the begining of s.
-    fn live_samples(s: &mut Samples<N, D>, resamples: &Resamples)
+    pub fn live_samples(s: &mut Samples<N, D>, resamples: &Resamples)
     {
         // reverse_copy_if live
         let mut si = s.len();
