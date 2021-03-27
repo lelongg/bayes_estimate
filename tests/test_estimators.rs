@@ -29,7 +29,7 @@ fn test_covariance() {
 }
 
 #[test]
-fn test_covariance_rheta() {
+fn test_covariance_rtheta() {
     rtheta::test_estimator(&mut KalmanState::new_zero(U3));
     rtheta::test_estimator(&mut KalmanState::new_zero(Dynamic::new(3)));
 }
