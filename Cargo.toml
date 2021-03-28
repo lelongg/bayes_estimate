@@ -11,14 +11,14 @@ keywords = [ "kalman", "bayesian", "linear", "discrete", 'no_std' ]
 license = "MIT"
 
 [dependencies]
-nalgebra = {version = "0.25.3"}
-rand_core = "0.6.2"
-rand_distr = "0.4.0"
-num-traits = "0.2.14"
+nalgebra = {version = "0.25"}
+rand_core = "0.6"
+rand_distr = "0.4"
+num-traits = "0.2"
 
 [dev-dependencies]
-approx = "0.4.0"
-rand = "0.8.3"
+approx = "0.4"
+rand = "0.8"
 
 [lib]
 name = "bayes_estimate"
