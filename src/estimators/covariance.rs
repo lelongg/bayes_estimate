@@ -8,13 +8,15 @@
 //!
 //! [`KalmanState`]: ../models/struct.KalmanState.html
 
+use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixN, RealField, VectorN, U1};
 use nalgebra as na;
-use na::{allocator::Allocator, DefaultAllocator, Dim, U1, MatrixN, RealField, VectorN};
 
 use crate::linalg::rcond;
-use crate::matrix::{check_non_negativ};
-use crate::models::{KalmanEstimator, KalmanState, ExtendedLinearObserver, ExtendedLinearPredictor, Estimator};
-use crate::noise::{CorrelatedNoise};
+use crate::matrix::check_non_negativ;
+use crate::models::{
+    Estimator, ExtendedLinearObserver, ExtendedLinearPredictor, KalmanEstimator, KalmanState,
+};
+use crate::noise::CorrelatedNoise;
 use nalgebra::MatrixMN;
 
 impl<N: RealField, D: Dim> KalmanState<N, D>
@@ -30,8 +32,8 @@ where
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for KalmanState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         Ok(self.x.clone())
@@ -58,7 +60,7 @@ where
 
 impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for KalmanState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn predict(
         &mut self,
@@ -68,7 +70,8 @@ where
     ) -> Result<(), &'static str> {
         self.x = x_pred.clone();
         // X = Fx.X.FX' + Q
-        self.X.quadform_tr(N::one(), &fx, &self.X.clone(), N::zero());
+        self.X
+            .quadform_tr(N::one(), &fx, &self.X.clone(), N::zero());
         self.X += &noise.Q;
 
         Ok(())
@@ -77,7 +80,12 @@ where
 
 impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for KalmanState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, D> + Allocator<N, ZD>
+    DefaultAllocator: Allocator<N, D, D>
+        + Allocator<N, ZD, ZD>
+        + Allocator<N, ZD, D>
+        + Allocator<N, D, ZD>
+        + Allocator<N, D>
+        + Allocator<N, ZD>,
 {
     fn observe_innovation(
         &mut self,
@@ -85,7 +93,6 @@ where
         hx: &MatrixMN<N, ZD, D>,
         noise: &CorrelatedNoise<N, ZD>,
     ) -> Result<(), &'static str> {
-
         // S = Hx.X.Hx' + Q
         let mut S = noise.Q.clone();
         S.quadform_tr(N::one(), hx, &self.X, N::one());
@@ -102,4 +109,3 @@ where
         Ok(())
     }
 }
-

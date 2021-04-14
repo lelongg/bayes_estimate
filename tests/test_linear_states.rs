@@ -1,13 +1,13 @@
 use nalgebra::{MatrixN, U2, Vector2};
 
 use bayes_estimate::estimators::information_root::InformationRootState;
-use bayes_estimate::estimators::ud::UDState;
+use bayes_estimate::estimators::ud::UdState;
 use bayes_estimate::models::{InformationState, KalmanState};
 use bayes_estimate::models::KalmanEstimator;
 
 #[test]
 fn test_init_matches_state() {
-    let mut udstate = UDState::new(
+    let mut udstate = UdState::new(
         MatrixN::<f64, U2>::new(1., 3., 0., 2.),
         Vector2::new(4., 5.)
     );

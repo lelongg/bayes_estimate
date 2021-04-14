@@ -13,21 +13,27 @@
 //! LD format of LdL' factor
 //! strict_lower_triangle(LD) = strict_lower_triangle(L), diagonal(LD) = d, strict_upper_triangle(LD) ignored or zeroed
 
-use nalgebra as na;
 use na::{allocator::Allocator, DefaultAllocator};
 use na::{Dim, MatrixMN, RealField};
+use nalgebra as na;
 
 use super::rcond;
 
-pub struct UDU<N: RealField> {
+pub struct UdU<N: RealField> {
     pub zero: N,
     pub one: N,
     pub minus_one: N,
 }
 
-impl<N: RealField> UDU<N> {
-    pub fn new() -> UDU<N> {
-        UDU {
+impl<N: RealField> Default for UdU<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<N: RealField> UdU<N> {
+    pub fn new() -> UdU<N> {
+        UdU {
             zero: N::zero(),
             one: N::one(),
             minus_one: N::one().neg(),
@@ -113,7 +119,7 @@ impl<N: RealField> UDU<N> {
         }
 
         // Estimate the reciprocal condition number
-        UDU::UdUrcond(M)
+        UdU::UdUrcond(M)
     }
 
     /// In place modified upper triangular Cholesky factor of a Positive definite or semi-definite matrix M
@@ -167,7 +173,7 @@ impl<N: RealField> UDU<N> {
         }
 
         // Estimate the reciprocal condition number
-        UDU::UdUrcond(M)
+        UdU::UdUrcond(M)
     }
 
     /// In place upper triangular Cholesky factor of a Positive definite or semi-definite matrix M.
@@ -388,5 +394,4 @@ impl<N: RealField> UDU<N> {
             }
         }
     }
-
 }

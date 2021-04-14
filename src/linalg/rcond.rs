@@ -18,7 +18,7 @@ where
 
         for i in 0..n {
             let d = sm[(i, i)];
-            if d != d {
+            if is_nan(d) {
                 // NaN
                 mind = N::one().neg();
                 break;
@@ -44,7 +44,7 @@ fn rcond_min_max<N: RealField>(mind: N, maxd: N) -> N {
         assert!(mind <= maxd); // check sanity
 
         let rcond = mind / maxd; // rcond from min/max norm
-        if rcond != rcond {
+        if is_nan(rcond) {
             // NaN, singular due to (mind == maxd) == (zero or infinity)
             N::zero()
         } else {
@@ -52,4 +52,9 @@ fn rcond_min_max<N: RealField>(mind: N, maxd: N) -> N {
             rcond
         }
     }
+}
+
+#[inline]
+fn is_nan<R: RealField>(x: R) -> bool {
+    x.partial_cmp(&R::zero()).is_none()
 }

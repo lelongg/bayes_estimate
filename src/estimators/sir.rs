@@ -24,14 +24,13 @@
 //!   Resampling requires comparisons of normalised likelihoods. These may become insignificant if
 //!   likelihoods have a large range. Resampling becomes ill conditioned for these samples.
 
-
-use na::{DefaultAllocator, Dim, MatrixN, RealField, U1, VectorN};
 use na::allocator::Allocator;
 use na::storage::Storage;
+use na::{DefaultAllocator, Dim, MatrixN, RealField, VectorN, U1};
 use nalgebra as na;
 use nalgebra::MatrixMN;
-use num_traits::{Pow, ToPrimitive};
 use num_traits::real::Real;
+use num_traits::{Pow, ToPrimitive};
 use rand_core::RngCore;
 use rand_distr::{Distribution, StandardNormal, Uniform};
 
@@ -50,7 +49,7 @@ where
     /// and their likelihoods (bootstrap weights)
     pub w: Likelihoods,
     /// A PRNG use to draw random samples
-    pub rng: Box<dyn RngCore>
+    pub rng: Box<dyn RngCore>,
 }
 
 /// State samples.
@@ -63,11 +62,11 @@ pub type Likelihoods = Vec<f32>;
 pub type Resamples = Vec<u32>;
 
 /// A resampling function.
-pub type Resampler = dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>;
+pub type Resampler =
+    dyn FnMut(&mut Likelihoods, &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>;
 
 /// A roughening function.
 pub type Roughener<N, D> = dyn FnMut(&mut Samples<N, D>, &mut dyn RngCore);
-
 
 impl<N: RealField, D: Dim> SampleState<N, D>
 where
@@ -79,22 +78,21 @@ where
         SampleState {
             s,
             w: vec![1f32; samples],
-            rng
+            rng,
         }
     }
 
     /// Predict sample state using a state prediction function 'f'.
-    pub fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>)
-    {
-        self.s.iter_mut().for_each(|el|{
-            el.copy_from(&f(el))
-        });
+    pub fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>) {
+        self.s.iter_mut().for_each(|el| el.copy_from(&f(el)));
     }
 
     /// Predict sample state using a sampled state prediction function 'f'.
     /// The sampling function should predict the state and sample any noise.
-    pub fn predict_sampled(&mut self, f: impl Fn(&VectorN<N, D>, &mut dyn RngCore) -> VectorN<N, D>)
-    {
+    pub fn predict_sampled(
+        &mut self,
+        f: impl Fn(&VectorN<N, D>, &mut dyn RngCore) -> VectorN<N, D>,
+    ) {
         // Predict particles s using supplied prediction function
         for si in 0..self.s.len() {
             let ps = f(&self.s[si], &mut self.rng);
@@ -131,8 +129,11 @@ where
     /// Returns:
     ///  number of unique samples,
     ///  smallest normalised likelohood, to determine numerical conditioning of likehoods
-    pub fn update_resample(&mut self, resampler: &mut Resampler, roughener: &mut Roughener<N, D>) -> Result<(u32, f32), &'static str>
-    {
+    pub fn update_resample(
+        &mut self,
+        resampler: &mut Resampler,
+        roughener: &mut Roughener<N, D>,
+    ) -> Result<(u32, f32), &'static str> {
         // Resample based on likelihoods
         let (resamples, unqiue_samples, lcond) = resampler(&mut self.w, self.rng.as_mut())?;
 
@@ -146,12 +147,11 @@ where
 
         Ok((unqiue_samples, lcond))
     }
-
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         // Mean of distribution: mean of particles
@@ -165,7 +165,6 @@ impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
         Ok(x)
     }
 }
-
 
 /// Standard resampler from [1].
 /// Algorithm:
@@ -182,15 +181,17 @@ impl<N: RealField, D: Dim> Estimator<N, D> for SampleState<N, D>
 /// Side effects:
 /// 'l' becomes a normalised cumulative sum,
 /// Draws are made from 'rng' for each likelihood
-pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
-{
+pub fn standard_resampler(
+    w: &mut Likelihoods,
+    rng: &mut dyn RngCore,
+) -> Result<(Resamples, u32, f32), &'static str> {
     let (lmin, lcum) = cumaltive_likelihood(w)?;
 
     // Sorted uniform random distribution [0..1) for each resample
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
     let mut ur: Vec<f32> = uniform01.sample_iter(rng).take(w.len()).collect();
     ur.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.);	// very bad if random is incorrect
+    assert!(*ur.first().unwrap() >= 0. && *ur.last().unwrap() < 1.); // very bad if random is incorrect
 
     // Scale ur to cumulative sum
     ur.iter_mut().for_each(|el| *el *= lcum);
@@ -198,28 +199,34 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
     // Resamples based on cumulative likelihood from sorted resample random values
     let mut uri = ur.iter();
     let mut urn = uri.next();
-    let mut unique : u32 = 0;
+    let mut unique: u32 = 0;
     let mut resamples = Resamples::with_capacity(w.len());
 
     for wi in w.iter() {
-        let mut res: u32 = 0;		// assume not resampled until find out otherwise
+        let mut res: u32 = 0; // assume not resampled until find out otherwise
         if (urn.is_some()) && *urn.unwrap() < *wi {
             unique += 1;
-            loop {                        // count resamples
+            loop {
+                // count resamples
                 res += 1;
                 urn = uri.next();
-                if urn.is_none() { break; }
-                if !(*urn.unwrap() < *wi) { break;}
+                if urn.is_none() {
+                    break;
+                }
+                if *urn.unwrap() >= *wi {
+                    break;
+                }
             }
         }
         resamples.push(res);
     }
 
-    if uri.peekable().peek().is_some() {  // resample failed due no non numeric likelhoods
+    if uri.peekable().peek().is_some() {
+        // resample failed due no non numeric likelhoods
         return Err("likelihoods are not numeric and cannot be resampled");
     }
 
-    return Ok((resamples, unique, lmin / lcum));
+    Ok((resamples, unique, lmin / lcum))
 }
 
 /// Systematic resample algorithm from [2].
@@ -236,8 +243,10 @@ pub fn standard_resampler(w: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<
 /// Side effects:
 /// 'l' becomes a normalised cumulative sum,
 /// Draws are made from 'rng' for each likelihood
-pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Result<(Resamples, u32, f32), &'static str>
-{
+pub fn systematic_resampler(
+    l: &mut Likelihoods,
+    rng: &mut dyn RngCore,
+) -> Result<(Resamples, u32, f32), &'static str> {
     let (lmin, lcum) = cumaltive_likelihood(l)?;
 
     let uniform01: Uniform<f32> = Uniform::new(0f32, 1f32);
@@ -245,7 +254,7 @@ pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Resul
     // Setup grid
     let glen = l.len();
     let gstep = lcum / glen as f32;
-    let goffset = uniform01.sample(rng) * gstep;		// random offset
+    let goffset = uniform01.sample(rng) * gstep; // random offset
 
     // Resamples based on cumulative likelihoods
     let mut resamples = Resamples::with_capacity(glen);
@@ -253,13 +262,16 @@ pub fn systematic_resampler(l: &mut Likelihoods, rng: &mut dyn RngCore) -> Resul
 
     let mut gi: u32 = 0;
     for li in l.iter() {
-        let mut res: u32 = 0;		// assume not resampled until find out otherwise
-        if (goffset + lcum * gi as f32  / glen as f32) < *li {
+        let mut res: u32 = 0; // assume not resampled until find out otherwise
+        if (goffset + lcum * gi as f32 / glen as f32) < *li {
             unique += 1;
-            loop {					// count resamples
+            loop {
+                // count resamples
                 res += 1;
                 gi += 1;
-                if !((goffset + lcum * gi as f32  / glen as f32) < *li) {break;}
+                if (goffset + lcum * gi as f32 / glen as f32) >= *li {
+                    break;
+                }
             }
         }
         resamples.push(res);
@@ -285,14 +297,17 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
             *li = t;
         }
     }
-    if lmin < 0.{ // bad likelihoods
+    if lmin < 0. {
+        // bad likelihoods
         return Err("negative likelihood");
     }
-    if lcum <= 0. { // bad cumulative likelihood (previous check should actually prevent -ve
+    if lcum <= 0. {
+        // bad cumulative likelihood (previous check should actually prevent -ve
         return Err("zero cumulative likelihood sum");
     }
     // Any numerical failure should cascade into cumulative sum
-    if lcum != lcum { // inequality due to NaN
+    if lcum.is_nan() {
+        // inequality due to NaN
         return Err("NaN cumulative likelihood sum");
     }
     Ok((lmin, lcum))
@@ -302,9 +317,9 @@ fn cumaltive_likelihood(l: &mut Likelihoods) -> Result<(f32, f32), &'static str>
 /// Uses a in-place copying algorithm:
 /// First copy the live samples (those resampled) to end of s.
 /// Replicate live sample in-place start an the begining of s.
-pub fn live_samples<N: RealField, D:Dim>(s: &mut Samples<N, D>, resamples: &Resamples)
-    where
-        DefaultAllocator: Allocator<N, D>,
+pub fn live_samples<N: RealField, D: Dim>(s: &mut Samples<N, D>, resamples: &[u32])
+where
+    DefaultAllocator: Allocator<N, D>,
 {
     // reverse_copy_if live
     let mut si = s.len();
@@ -327,7 +342,9 @@ pub fn live_samples<N: RealField, D:Dim>(s: &mut Samples<N, D>, resamples: &Resa
                 s[si] = s[livei].clone();
                 si += 1;
                 res -= 1;
-                if res == 0 { break; }
+                if res == 0 {
+                    break;
+                }
             }
             livei += 1;
         }
@@ -346,7 +363,7 @@ pub fn live_samples<N: RealField, D:Dim>(s: &mut Samples<N, D>, resamples: &Resa
 ///
 /// Numerics:
 ///  If the are very few unique samples the roughening will colapse as it is not representative of the true state distribution.
-pub fn roughen_minmax<N: RealField, D:Dim>(s: &mut Samples<N, D>, k: f32, rng: &mut dyn RngCore)
+pub fn roughen_minmax<N: RealField, D: Dim>(s: &mut Samples<N, D>, k: f32, rng: &mut dyn RngCore)
 where
     DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
@@ -356,7 +373,8 @@ where
     // Find min and max state dimension in all states
     let mut xmin = s[0].clone();
     let mut xmax = xmin.clone();
-    for si in s.iter() {		// Loop includes 0 to simplify code
+    for si in s.iter() {
+        // Loop includes 0 to simplify code
         let mut mini = xmin.iter_mut();
         let mut maxi = xmax.iter_mut();
 
@@ -364,12 +382,16 @@ where
             let minx = mini.next().unwrap();
             let maxx = maxi.next().unwrap();
 
-            if *xd < *minx {*minx = *xd;}
-            if *xd > *maxx {*maxx = *xd;}
+            if *xd < *minx {
+                *minx = *xd;
+            }
+            if *xd > *maxx {
+                *maxx = *xd;
+            }
         }
     }
     // Roughening st.dev from scaled max-min and state dimensions
-    let sigma_scale = k * f32::pow(s.len() as f32, -1f32/(x_size as f32));
+    let sigma_scale = k * f32::pow(s.len() as f32, -1f32 / (x_size as f32));
     let sigma = (xmax - xmin) * N::from_f32(sigma_scale).unwrap();
     let noise = normal_noise_sampler(sigma);
 
@@ -383,12 +405,21 @@ where
 /// The roughening is scaled by the deviation of the noise.
 ///
 /// 'k' is scaling factor for normally distributed noise
-pub fn roughen_noise<N: RealField, D: Dim, ND: Dim>(s: &mut Samples<N, D>, noise: &CoupledNoise<N, D, ND>, k: f32, rng: &mut dyn RngCore)
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ND> + Allocator<N, ND, ND> + Allocator<N, D> + Allocator<N, ND>
+pub fn roughen_noise<N: RealField, D: Dim, ND: Dim>(
+    s: &mut Samples<N, D>,
+    noise: &CoupledNoise<N, D, ND>,
+    k: f32,
+    rng: &mut dyn RngCore,
+) where
+    DefaultAllocator: Allocator<N, D, D>
+        + Allocator<N, D, ND>
+        + Allocator<N, ND, ND>
+        + Allocator<N, D>
+        + Allocator<N, ND>,
 {
     // Roughening st.dev from scaled  and state dimensions
-    let sigma_scale = N::from_f32(k * f32::pow(s.len() as f32, -1f32/(noise.G.nrows() as f32))).unwrap();
+    let sigma_scale =
+        N::from_f32(k * f32::pow(s.len() as f32, -1f32 / (noise.G.nrows() as f32))).unwrap();
     let mut coupling = noise.G.clone();
     for (i, mut c) in coupling.column_iter_mut().enumerate() {
         c *= sigma_scale * noise.q[i];
@@ -401,8 +432,8 @@ pub fn roughen_noise<N: RealField, D: Dim, ND: Dim>(s: &mut Samples<N, D>, noise
 }
 
 impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, U1, D> + Allocator<N, D>,
 {
     fn init(&mut self, state: &KalmanState<N, D>) -> Result<(), &'static str> {
         for s in self.s.iter_mut() {
@@ -410,9 +441,9 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
         }
         let coupled_noise = CoupledNoise::from_correlated(&CorrelatedNoise { Q: state.X.clone() })?;
         let sampler = normal_noise_sampler_coupled(coupled_noise.G);
-        self.predict_sampled(move |x: &VectorN<N,D>, rng: &mut dyn RngCore| -> VectorN<N,D> {
-            x + sampler(rng)
-        });
+        self.predict_sampled(
+            move |x: &VectorN<N, D>, rng: &mut dyn RngCore| -> VectorN<N, D> { x + sampler(rng) },
+        );
 
         Ok(())
     }
@@ -437,44 +468,58 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for SampleState<N, D>
 /// Generate as sampling function for normally distributed noise.
 ///
 /// 'std_dev' standard deviation of normally distributed noise.
-pub fn normal_noise_sampler<N: RealField, D: Dim>(std_dev: VectorN<N, D>) -> impl Fn(&mut dyn RngCore) -> VectorN<N,D>
-    where
-        DefaultAllocator: Allocator<N, D>,
+pub fn normal_noise_sampler<N: RealField, D: Dim>(
+    std_dev: VectorN<N, D>,
+) -> impl Fn(&mut dyn RngCore) -> VectorN<N, D>
+where
+    DefaultAllocator: Allocator<N, D>,
 {
     // Sample with the coupled noise deviation
-    move |rng: &mut dyn RngCore| -> VectorN<N,D> {
-        let rnormal = StandardNormal.sample_iter(rng)
+    move |rng: &mut dyn RngCore| -> VectorN<N, D> {
+        let rnormal = StandardNormal
+            .sample_iter(rng)
             .enumerate()
-            .map(|(i, n): (usize, f32)| {N::from_f32(n).unwrap() * std_dev[i]}).
-            take(std_dev.nrows());
+            .map(|(i, n): (usize, f32)| N::from_f32(n).unwrap() * std_dev[i])
+            .take(std_dev.nrows());
         VectorN::from_iterator_generic(std_dev.data.shape().0, U1, rnormal)
     }
 }
 
 /// Generate as sampling function for normally distributed coupled noise.
-pub fn normal_noise_sampler_coupled<N: RealField, D: Dim, ND: Dim>(coupleing: MatrixMN<N, D, ND>) -> impl Fn(&mut dyn RngCore) -> VectorN<N,D>
-    where
-        DefaultAllocator: Allocator<N, D, ND> + Allocator<N, D> + Allocator<N, ND>,
+pub fn normal_noise_sampler_coupled<N: RealField, D: Dim, ND: Dim>(
+    coupleing: MatrixMN<N, D, ND>,
+) -> impl Fn(&mut dyn RngCore) -> VectorN<N, D>
+where
+    DefaultAllocator: Allocator<N, D, ND> + Allocator<N, D> + Allocator<N, ND>,
 {
     // Sample with the coupled noise deviation
-    move |rng: &mut dyn RngCore| -> VectorN<N,D> {
-        let rnormal = StandardNormal.sample_iter(rng).map(|n: f32| {N::from_f32(n).unwrap()}).take(coupleing.ncols());
+    move |rng: &mut dyn RngCore| -> VectorN<N, D> {
+        let rnormal = StandardNormal
+            .sample_iter(rng)
+            .map(|n: f32| N::from_f32(n).unwrap())
+            .take(coupleing.ncols());
         let n = VectorN::from_iterator_generic(coupleing.data.shape().1, U1, rnormal);
         &coupleing * n
     }
 }
 
 pub fn gaussian_observation_likelihood<'r, N: RealField + ToPrimitive, D: Dim, ZD: Dim>(
-    z: &'r VectorN<N, ZD>, h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
-    noise: &CorrelatedNoise<N, ZD>) -> impl Fn(&VectorN<N, D>) -> f32 + 'r
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>
+    z: &'r VectorN<N, ZD>,
+    h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+    noise: &CorrelatedNoise<N, ZD>,
+) -> impl Fn(&VectorN<N, D>) -> f32 + 'r
+where
+    DefaultAllocator:
+        Allocator<N, D, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
 {
     // Observation Likihood for correlated Gaussian noise
     let cholesky = noise.Q.clone().cholesky().unwrap();
     let zinv = cholesky.inverse();
-    let zinv_diagonal = cholesky.l_dirty().iter().step_by(noise.Q.nrows()+1);
-    let determinate_zinv = zinv_diagonal.fold(N::one(), |prod: N, n: &N| prod * *n).to_f32().unwrap();
+    let zinv_diagonal = cholesky.l_dirty().iter().step_by(noise.Q.nrows() + 1);
+    let determinate_zinv = zinv_diagonal
+        .fold(N::one(), |prod: N, n: &N| prod * *n)
+        .to_f32()
+        .unwrap();
 
     move |x: &VectorN<N, D>| -> f32 {
         let innov = z - h(x);

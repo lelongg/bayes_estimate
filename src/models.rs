@@ -5,10 +5,10 @@
 //! Linear models are represented as structs.
 //! Common Bayesian discrete system estimation operations are defined as traits.
 
-use nalgebra as na;
+pub use crate::noise::CorrelatedNoise;
+use na::SimdRealField;
 use na::{allocator::Allocator, DefaultAllocator, Dim, MatrixMN, MatrixN, VectorN};
-use na::{SimdRealField};
-use crate::noise::CorrelatedNoise;
+use nalgebra as na;
 
 /// Kalman state.
 ///
@@ -41,8 +41,8 @@ where
 
 /// A state estimator.
 pub trait Estimator<N: SimdRealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D>,
 {
     /// The estimator's estimate of the system's state.
     fn state(&self) -> Result<VectorN<N, D>, &'static str>;
@@ -67,7 +67,7 @@ where
 /// Uses a non-linear state prediction with linear estimation model with additive noise.
 pub trait ExtendedLinearPredictor<N: SimdRealField, D: Dim>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Uses a non-linear state prediction with linear estimation model with additive noise.
     fn predict(
@@ -83,8 +83,7 @@ where
 /// Uses a non-linear state observation with linear estimation model with additive noise.
 pub trait ExtendedLinearObserver<N: SimdRealField, D: Dim, ZD: Dim>
 where
-    DefaultAllocator:
-        Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD>
+    DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, ZD>,
 {
     /// Uses a non-linear state observation with linear estimation model with additive noise.
     fn observe_innovation(

@@ -6,17 +6,16 @@
 //!
 //! The linear representation can also be used for non-linear system by using linearised forms of the system model.
 
+use na::{allocator::Allocator, storage::Storage, DefaultAllocator};
+use na::{Dim, MatrixMN, MatrixN, RealField, VectorN, U1};
 use nalgebra as na;
-use na::{allocator::Allocator, DefaultAllocator, storage::Storage};
-use na::{Dim, RealField, U1, MatrixMN, MatrixN, VectorN};
 
-use crate::linalg::cholesky::UDU;
+use crate::linalg::cholesky::UdU;
 use crate::matrix;
-use crate::models::{KalmanEstimator, KalmanState, Estimator};
-use crate::noise::{UncorrelatedNoise, CoupledNoise, CorrelatedNoise};
+use crate::matrix::check_non_negativ;
+use crate::models::{Estimator, KalmanEstimator, KalmanState};
+use crate::noise::{CorrelatedNoise, CoupledNoise, UncorrelatedNoise};
 use nalgebra::{DimAdd, DimSum};
-use crate::matrix::{check_non_negativ};
-
 
 /// UD State representation.
 ///
@@ -25,21 +24,21 @@ use crate::matrix::{check_non_negativ};
 ///
 /// The state covariance is represented as a U.d.U' factorisation, where U is upper triangular matrix (0 diagonal) and d is a diagonal vector.
 /// U and d are packed into a single UD Matrix, the lower Triangle ist not part of state representation.
-pub struct UDState<N: RealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+pub struct UdState<N: RealField, D: Dim>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// State vector
     pub x: VectorN<N, D>,
     /// UD matrix representation of state covariance
     pub UD: MatrixN<N, D>,
-    // UDU instance for factorisations
-    udu: UDU<N>,
+    // UdU instance for factorisations
+    udu: UdU<N>,
 }
 
-impl<N: RealField, D: Dim> UDState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+impl<N: RealField, D: Dim> UdState<N, D>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Create a UDState for given state dimensions.
     ///
@@ -47,10 +46,10 @@ impl<N: RealField, D: Dim> UDState<N, D>
     pub fn new(UD: MatrixN<N, D>, x: VectorN<N, D>) -> Self {
         assert_eq!(x.nrows(), UD.nrows(), "x rows must be == UD rows");
 
-        UDState {
+        UdState {
             UD,
             x,
-            udu: UDU::new(),
+            udu: UdU::new(),
         }
     }
 
@@ -58,10 +57,10 @@ impl<N: RealField, D: Dim> UDState<N, D>
     ///
     /// d is the size of states vector and rows in UD.
     pub fn new_zero(d: D) -> Self {
-        UDState {
+        UdState {
             UD: MatrixN::<N, D>::zeros_generic(d, d),
             x: VectorN::zeros_generic(d, U1),
-            udu: UDU::new(),
+            udu: UdU::new(),
         }
     }
 
@@ -71,9 +70,9 @@ impl<N: RealField, D: Dim> UDState<N, D>
         x_pred: &VectorN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
-        where
-            D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, DimSum<D, QD>, U1> + Allocator<N, D, QD> + Allocator<N, QD>
+    where
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, DimSum<D, QD>, U1> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
         let mut scratch = self.new_predict_scratch(noise.q.data.shape().0);
         self.predict_use_scratch(&mut scratch, x_pred, fx, noise)
@@ -90,26 +89,26 @@ impl<N: RealField, D: Dim> UDState<N, D>
         hx: &MatrixMN<N, ZD, D>,
         noise: &UncorrelatedNoise<N, ZD>,
     ) -> Result<N, &'static str>
-        where
-            DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
+    where
+        DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>,
     {
         let mut scratch = self.new_observe_scratch();
-        UDState::observe_innovation_use_scratch(self, &mut scratch, s, hx, noise)
+        UdState::observe_innovation_use_scratch(self, &mut scratch, s, hx, noise)
     }
 }
 
-impl<N: RealField, D: Dim> Estimator<N, D> for UDState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+impl<N: RealField, D: Dim> Estimator<N, D> for UdState<N, D>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         KalmanEstimator::kalman_state(self).map(|r| r.x)
     }
 }
 
-impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UdState<N, D>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Initialise the UDState with a KalmanState.
     ///
@@ -134,9 +133,12 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
         let x_shape = self.x.data.shape().0;
 
         let mut X = self.UD.columns_generic(0, x_shape).into_owned();
-        UDU::UdUrecompose(&mut X);
+        UdU::UdUrecompose(&mut X);
 
-        Ok(KalmanState { x: self.x.clone(), X })
+        Ok(KalmanState {
+            x: self.x.clone(),
+            X,
+        })
     }
 }
 
@@ -144,32 +146,32 @@ impl<N: RealField, D: Dim> KalmanEstimator<N, D> for UDState<N, D>
 ///
 /// Noise represented as a the noise covariance as a factorised UdU' matrix.
 pub struct CorrelatedFactorNoise<N: RealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D, D>
+where
+    DefaultAllocator: Allocator<N, D, D>,
 {
     /// Noise covariance
-    pub UD: MatrixN<N, D>
+    pub UD: MatrixN<N, D>,
 }
 
 impl<N: RealField, D: Dim> CorrelatedFactorNoise<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D>,
+where
+    DefaultAllocator: Allocator<N, D, D>,
 {
     /// Creates a CorrelatedFactorNoise from an CorrelatedNoise.
     /// The CorrelatedNoise must be PSD.
     pub fn from_correlated(correlated: &CorrelatedNoise<N, D>) -> Result<Self, &'static str> {
-        let udu = UDU::new();
+        let udu = UdU::new();
         let mut ud: MatrixN<N, D> = correlated.Q.clone_owned();
         let rcond = udu.UdUfactor_variant2(&mut ud, correlated.Q.nrows());
         check_non_negativ(rcond, "Q not PSD")?;
 
-        Ok(CorrelatedFactorNoise{ UD: ud })
+        Ok(CorrelatedFactorNoise { UD: ud })
     }
 }
 
-impl<N: RealField, D: Dim> UDState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+impl<N: RealField, D: Dim> UdState<N, D>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     /// Special Linear 'hx' observe for correlated factorised noise.
     ///
@@ -184,8 +186,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
         h_normalize: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
         noise_factor: &CorrelatedFactorNoise<N, ZD>,
     ) -> Result<N, &'static str>
-        where
-            DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD>
+    where
+        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD>,
     {
         let x_size = self.x.nrows();
         let z_size = z.nrows();
@@ -231,7 +233,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
             // Update UD and extract gain
             let mut S = self.udu.zero;
             GIHx.row(o).transpose_to(&mut scratch.a);
-            let rcond = UDState::observeUD(self, &mut scratch, &mut S, noise_factor.UD[(o, o)]);
+            let rcond = UdState::observeUD(self, &mut scratch, &mut S, noise_factor.UD[(o, o)]);
             matrix::check_positive(rcond, "S not PD in observe")?; // -1 implies S singular
             if rcond < rcondmin {
                 rcondmin = rcond;
@@ -248,9 +250,9 @@ impl<N: RealField, D: Dim> UDState<N, D>
 ///
 /// Provides temporary variables for prediction calculation.
 pub struct PredictScratch<N: RealField, D: Dim, QD: Dim>
-    where
-        D: DimAdd<QD>,
-        DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
+where
+    D: DimAdd<QD>,
+    DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>>,
 {
     pub G: MatrixMN<N, D, QD>,
     pub d: VectorN<N, DimSum<D, QD>>,
@@ -262,22 +264,22 @@ pub struct PredictScratch<N: RealField, D: Dim, QD: Dim>
 ///
 /// Provides temporary variables for observe calculation.
 pub struct ObserveScratch<N: RealField, D: Dim>
-    where
-        DefaultAllocator: Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D>,
 {
     pub w: VectorN<N, D>,
     pub a: VectorN<N, D>,
     pub b: VectorN<N, D>,
 }
 
-impl<N: RealField, D: Dim> UDState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+impl<N: RealField, D: Dim> UdState<N, D>
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     pub fn new_predict_scratch<QD: Dim>(&self, qd: QD) -> PredictScratch<N, D, QD>
-        where
-            D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>
+    where
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, D, QD> + Allocator<N, DimSum<D, QD>, U1>,
     {
         // x + qd rows
         let xqd_size = self.UD.data.shape().1.add(qd);
@@ -305,14 +307,14 @@ impl<N: RealField, D: Dim> UDState<N, D>
         fx: &MatrixN<N, D>,
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
-        where
-            D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
+    where
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
         self.x = x_pred.clone();
 
         // Predict UD from model
-        let rcond = UDState::predictGq(self, scratch, &fx, &noise.G, &noise.q);
+        let rcond = UdState::predictGq(self, scratch, &fx, &noise.G, &noise.q);
         matrix::check_non_negativ(rcond, "X not PSD")
     }
 
@@ -323,8 +325,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
         hx: &MatrixMN<N, ZD, D>,
         noise: &UncorrelatedNoise<N, ZD>,
     ) -> Result<N, &'static str>
-        where
-            DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>
+    where
+        DefaultAllocator: Allocator<N, ZD, D> + Allocator<N, ZD>,
     {
         let z_size = s.nrows();
 
@@ -339,7 +341,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
             // Update UD and extract gain
             let mut S = self.udu.zero;
             hx.row(o).transpose_to(&mut scratch.a);
-            let rcond = UDState::observeUD(self, scratch, &mut S, noise.q[o]);
+            let rcond = UdState::observeUD(self, scratch, &mut S, noise.q[o]);
             if rcond < rcondmin {
                 rcondmin = rcond;
             }
@@ -360,23 +362,30 @@ impl<N: RealField, D: Dim> UDState<N, D>
         G: &MatrixMN<N, D, QD>,
         q: &VectorN<N, QD>,
     ) -> N
-        where
-            D: DimAdd<QD>,
-            DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
+    where
+        D: DimAdd<QD>,
+        DefaultAllocator: Allocator<N, DimSum<D, QD>> + Allocator<N, D, QD> + Allocator<N, QD>,
     {
         let nx_ = self.x.data.shape().0;
         let nx = nx_.value();
         let nq_ = q.data.shape().0;
 
         // Augment d with q, UD with G
-        scratch.d.rows_generic_mut(nx, q.data.shape().0).copy_from(q);
+        scratch
+            .d
+            .rows_generic_mut(nx, q.data.shape().0)
+            .copy_from(q);
         scratch.G.copy_from(G);
 
         // U=Fx*U and diagonals retrieved
-        for j in (1..nx).rev() { // nx-1..1
+        for j in (1..nx).rev() {
+            // nx-1..1
             let mut UD_j = self.UD.column_mut(j);
             // Prepare d as temporary
-            scratch.d.rows_range_mut(0..j+1).copy_from(&UD_j.rows_range(0..j+1));
+            scratch
+                .d
+                .rows_range_mut(0..j + 1)
+                .copy_from(&UD_j.rows_range(0..j + 1));
 
             // Lower triangle of UD is implicitly empty
             let Fx_j = Fx.column(j);
@@ -393,7 +402,8 @@ impl<N: RealField, D: Dim> UDState<N, D>
         self.UD.column_mut(0).copy_from(&Fx.column(0));
 
         // The MWG-S algorithm on UD transpose
-        for j in (0..nx).rev() { // n-1..0
+        for j in (0..nx).rev() {
+            // n-1..0
             let mut e = self.udu.zero;
 
             let mut vi = scratch.v.iter_mut();
@@ -417,8 +427,16 @@ impl<N: RealField, D: Dim> UDState<N, D>
                 let diaginv = self.udu.one / e;
 
                 for k in 0..j {
-                    e =     self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
-                        + scratch.G.row(k).columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(nx, nq_));
+                    e = self
+                        .UD
+                        .row(k)
+                        .columns_generic(0, nx_)
+                        .tr_dot(&scratch.dv.rows_generic(0, nx_))
+                        + scratch
+                            .G
+                            .row(k)
+                            .columns_generic(0, nq_)
+                            .tr_dot(&scratch.dv.rows_generic(nx, nq_));
                     e *= diaginv;
                     self.UD[(j, k)] = e;
 
@@ -436,10 +454,18 @@ impl<N: RealField, D: Dim> UDState<N, D>
                 // diaginv = 1 / e
 
                 for k in 0..j {
-                    e =     self.UD.row(k).columns_generic(0, nx_).tr_dot(&scratch.dv.rows_generic(0, nx_))
-                        + scratch.G.row(k).columns_generic(0, nq_).tr_dot(&scratch.dv.rows_generic(nx, nq_));
+                    e = self
+                        .UD
+                        .row(k)
+                        .columns_generic(0, nx_)
+                        .tr_dot(&scratch.dv.rows_generic(0, nx_))
+                        + scratch
+                            .G
+                            .row(k)
+                            .columns_generic(0, nq_)
+                            .tr_dot(&scratch.dv.rows_generic(nx, nq_));
                     if e != self.udu.zero {
-                            return self.udu.minus_one;
+                        return self.udu.minus_one;
                     }
                     // UD and G are unchanged as e == 0
                 }
@@ -454,7 +480,7 @@ impl<N: RealField, D: Dim> UDState<N, D>
         self.UD.fill_lower_triangle(N::zero(), 1);
 
         // Estimate the reciprocal condition number from upper triangular part
-        UDU::UdUrcond(&self.UD)
+        UdU::UdUrcond(&self.UD)
     }
 
     /// Linear UD factorisation update from Bierman p.100
@@ -471,15 +497,19 @@ impl<N: RealField, D: Dim> UDState<N, D>
     ///  r is PSD (not checked)
     /// # Return
     ///  reciprocal condition number of UD, -1 if alpha singular (negative or zero)
-    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, q: N)
-                 -> N {
+    fn observeUD(&mut self, scratch: &mut ObserveScratch<N, D>, alpha: &mut N, q: N) -> N {
         let n = self.UD.nrows();
         // a(n) is U'a
         // b(n) is Unweighted Kalman gain
 
         // Compute b = DU'h, a = U'h
-        for j in (1..n).rev() { // n-1..1
-            let t = self.UD.column(j).rows_range(0..j).dot(&scratch.a.rows_range(0..j));
+        for j in (1..n).rev() {
+            // n-1..1
+            let t = self
+                .UD
+                .column(j)
+                .rows_range(0..j)
+                .dot(&scratch.a.rows_range(0..j));
             scratch.a[j] += t;
             scratch.b[j] = self.UD[(j, j)] * scratch.a[j];
         }
@@ -516,6 +546,6 @@ impl<N: RealField, D: Dim> UDState<N, D>
         scratch.w.copy_from(&(&scratch.b * gamma));
 
         // Estimate the reciprocal condition number from upper triangular part
-        UDU::UdUrcond(&self.UD)
+        UdU::UdUrcond(&self.UD)
     }
 }

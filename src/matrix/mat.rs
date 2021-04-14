@@ -55,7 +55,7 @@ pub fn quadform_tr_x<N: RealField, D1, S, R3, C3, S3>(
 /// Checks a the reciprocal condition number is > 0 .
 ///
 /// IEC 559 NaN values are never true
-pub fn check_positive<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str> {
+pub fn check_positive<N: RealField>(rcond: N, message: &str) -> Result<N, &str> {
     if rcond > N::zero() {
         Ok(rcond)
     } else {
@@ -66,11 +66,10 @@ pub fn check_positive<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N,
 /// Checks a the reciprocal condition number is >= 0 .
 ///
 /// IEC 559 NaN values are never true
-pub fn check_non_negativ<'a, N: RealField>(rcond: N, message: &'a str) -> Result<N, &'a str> {
+pub fn check_non_negativ<N: RealField>(rcond: N, message: &str) -> Result<N, &str> {
     if rcond >= N::zero() {
         Ok(rcond)
     } else {
         Err(message)
     }
 }
-

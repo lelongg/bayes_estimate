@@ -11,12 +11,18 @@
 //!
 //! [`InformationState`]: ../models/struct.InformationState.html
 
+use na::{
+    allocator::Allocator, storage::Storage, DefaultAllocator, Dim, MatrixMN, MatrixN, RealField,
+    VectorN, U1,
+};
 use nalgebra as na;
-use na::{allocator::Allocator, DefaultAllocator, storage::Storage, Dim, U1, MatrixMN, MatrixN, RealField, VectorN};
 
 use crate::linalg::rcond;
-use crate::matrix::{check_positive};
-use crate::models::{InformationState, KalmanEstimator, KalmanState, ExtendedLinearPredictor, Estimator, ExtendedLinearObserver};
+use crate::matrix::check_positive;
+use crate::models::{
+    Estimator, ExtendedLinearObserver, ExtendedLinearPredictor, InformationState, KalmanEstimator,
+    KalmanState,
+};
 use crate::noise::{CorrelatedNoise, CoupledNoise};
 
 impl<N: RealField, D: Dim> InformationState<N, D>
@@ -32,8 +38,8 @@ where
 }
 
 impl<N: RealField, D: Dim> Estimator<N, D> for InformationState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
+where
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn state(&self) -> Result<VectorN<N, D>, &'static str> {
         KalmanEstimator::kalman_state(self).map(|r| r.x)
@@ -65,7 +71,7 @@ where
 
 impl<N: RealField, D: Dim> ExtendedLinearPredictor<N, D> for InformationState<N, D>
 where
-    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>
+    DefaultAllocator: Allocator<N, D, D> + Allocator<N, D>,
 {
     fn predict(
         &mut self,
@@ -74,35 +80,52 @@ where
         noise: &CorrelatedNoise<N, D>,
     ) -> Result<(), &'static str> {
         // Covariance
-        let mut X = self.I.clone().cholesky().ok_or("I not PD in predict")?.inverse();
+        let mut X = self
+            .I
+            .clone()
+            .cholesky()
+            .ok_or("I not PD in predict")?
+            .inverse();
 
         // Predict information matrix, and state covariance
         X.quadform_tr(N::one(), &fx, &X.clone(), N::zero());
         X += &noise.Q;
 
-        self.init(&KalmanState { x: x_pred.clone_owned(), X })?;
+        self.init(&KalmanState {
+            x: x_pred.clone_owned(),
+            X,
+        })?;
 
-        return Ok(())
+        Ok(())
     }
 }
 
 impl<N: RealField, D: Dim, ZD: Dim> ExtendedLinearObserver<N, D, ZD> for InformationState<N, D>
-    where
-        DefaultAllocator: Allocator<N, D, D> + Allocator<N, D, ZD> + Allocator<N, ZD, D> + Allocator<N, ZD, ZD> + Allocator<N, D> + Allocator<N, ZD>,
+where
+    DefaultAllocator: Allocator<N, D, D>
+        + Allocator<N, D, ZD>
+        + Allocator<N, ZD, D>
+        + Allocator<N, ZD, ZD>
+        + Allocator<N, D>
+        + Allocator<N, ZD>,
 {
     fn observe_innovation(
         &mut self,
         s: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,
         noise: &CorrelatedNoise<N, ZD>,
-    ) -> Result<(), &'static str>
-    {
+    ) -> Result<(), &'static str> {
         let x = self.state().unwrap();
-        let noise_inv = noise.Q.clone().cholesky().ok_or("Q not PD in observe")?.inverse();
+        let noise_inv = noise
+            .Q
+            .clone()
+            .cholesky()
+            .ok_or("Q not PD in observe")?
+            .inverse();
         let info = self.observe_info(hx, &noise_inv, &(s + hx * x));
         self.add_information(&info);
 
-        return Ok(())
+        Ok(())
     }
 }
 
@@ -124,7 +147,8 @@ where
         noise: &CoupledNoise<N, D, QD>,
     ) -> Result<N, &'static str>
     where
-        DefaultAllocator: Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>,
+        DefaultAllocator:
+            Allocator<N, QD, QD> + Allocator<N, D, QD> + Allocator<N, QD, D> + Allocator<N, QD>,
     {
         let I_shape = self.I.data.shape();
 
@@ -162,11 +186,12 @@ where
     pub fn observe_info<ZD: Dim>(
         &self,
         hx: &MatrixMN<N, ZD, D>,
-        noise_inv: &MatrixN<N, ZD>,  // Inverse of correlated noise model
-        z: &VectorN<N, ZD>
+        noise_inv: &MatrixN<N, ZD>, // Inverse of correlated noise model
+        z: &VectorN<N, ZD>,
     ) -> InformationState<N, D>
     where
-        DefaultAllocator: Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>
+        DefaultAllocator:
+            Allocator<N, ZD, ZD> + Allocator<N, ZD, D> + Allocator<N, D, ZD> + Allocator<N, ZD>,
     {
         // Observation Information
         let HxTZI = hx.tr_mul(noise_inv);
