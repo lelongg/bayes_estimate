@@ -24,7 +24,7 @@ where
     /// State prediction with a functional prediction model and additive noise.
     pub fn predict_unscented(
         &mut self,
-        f: fn(&VectorN<N, D>) -> VectorN<N, D>,
+        f: impl Fn(&VectorN<N, D>) -> VectorN<N, D>,
         noise: &CorrelatedNoise<N, D>,
         kappa: N,
     ) -> Result<(), &'static str> {
@@ -47,8 +47,8 @@ where
 
     pub fn observe_unscented<ZD: Dim>(
         &mut self,
-        h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
-        h_normalise: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
+        h: impl Fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+        h_normalise: impl Fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
         noise: &CorrelatedNoise<N, ZD>,
         s: &VectorN<N, ZD>,
         kappa: N,

@@ -183,7 +183,7 @@ where
         &mut self,
         z: &VectorN<N, ZD>,
         hx: &MatrixMN<N, ZD, D>,
-        h_normalize: fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
+        h_normalize: impl Fn(&mut VectorN<N, ZD>, &VectorN<N, ZD>),
         noise_factor: &CorrelatedFactorNoise<N, ZD>,
     ) -> Result<N, &'static str>
     where

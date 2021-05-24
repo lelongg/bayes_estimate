@@ -55,7 +55,7 @@ where
     fn predict_fn(
         &mut self,
         x_pred: &VectorN<f64, D>,
-        f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) where
@@ -65,8 +65,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>;
@@ -89,7 +89,7 @@ where
     fn predict_fn(
         &mut self,
         x_pred: &VectorN<f64, D>,
-        _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        _f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -105,8 +105,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
@@ -135,7 +135,7 @@ where
     fn predict_fn(
         &mut self,
         x_pred: &VectorN<f64, D>,
-        _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        _f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -151,8 +151,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
@@ -214,7 +214,7 @@ where
     fn predict_fn(
         &mut self,
         x_pred: &VectorN<f64, D>,
-        _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        _f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -224,8 +224,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str>
@@ -297,7 +297,7 @@ where
     fn predict_fn(
         &mut self,
         x_pred: &VectorN<f64, D>,
-        _f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        _f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -307,8 +307,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
@@ -324,7 +324,7 @@ where
             let noise_fac = CorrelatedFactorNoise::from_correlated(&noise)?;
             let h_normalize = |_h: &mut VectorN<f64, ZD>, _h0: &VectorN<f64, ZD>| {};
             self.ud
-                .observe_linear_correlated::<ZD>(z, hx, h_normalize, &noise_fac)
+                .observe_linear_correlated(z, hx, h_normalize, &noise_fac)
                 .map(|_rcond| {})
         }
     }
@@ -403,7 +403,7 @@ where
     fn predict_fn(
         &mut self,
         _x_pred: &VectorN<f64, D>,
-        f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         _fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -415,8 +415,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         _hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {
@@ -486,7 +486,7 @@ where
     fn predict_fn(
         &mut self,
         _x_pred: &VectorN<f64, D>,
-        f: fn(&VectorN<f64, D>) -> VectorN<f64, D>,
+        f: impl Fn(&VectorN<f64, D>) -> VectorN<f64, D>,
         _fx: &MatrixN<f64, D>,
         noise: &CoupledNoise<f64, D, QD>,
     ) {
@@ -504,8 +504,8 @@ where
     fn observe(
         &mut self,
         z: &VectorN<f64, ZD>,
-        h: fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
-        _h_normalize: fn(h: &mut VectorN<f64, ZD>, h0: &VectorN<f64, ZD>),
+        h: impl Fn(&VectorN<f64, D>) -> VectorN<f64, ZD>,
+        _h_normalize: impl Fn(&mut VectorN<f64, ZD>, &VectorN<f64, ZD>),
         _hx: &MatrixMN<f64, ZD, D>,
         noise: &CorrelatedNoise<f64, ZD>,
     ) -> Result<(), &'static str> {

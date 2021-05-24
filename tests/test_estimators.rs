@@ -181,7 +181,7 @@ pub mod simple {
     /// Numerically test the estimation operations of a TestEstimator.
     ///
     /// Prediction und observation operations are performed and the expected KalmanState is checked.
-    pub fn test_estimator<D: Dim>(est: &mut dyn FatEstimator<D, U1, U1>)
+    pub fn test_estimator<D: Dim>(est: &mut impl FatEstimator<D, U1, U1>)
     where
         DefaultAllocator: Allocator<f64, D, D>
             + Allocator<f64, D>
@@ -369,7 +369,7 @@ pub mod rtheta {
     /// Numerically test the estimation operations of a TestEstimator.
     ///
     /// Prediction und observation operations are performed and the expected KalmanState is checked.
-    pub fn test_estimator<D: Dim>(est: &mut dyn FatEstimator<D, U2, U2>)
+    pub fn test_estimator<D: Dim>(est: &mut impl FatEstimator<D, U2, U2>)
     where
         DefaultAllocator: Allocator<f64, D, D>
             + Allocator<f64, D>

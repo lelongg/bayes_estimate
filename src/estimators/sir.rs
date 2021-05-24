@@ -83,7 +83,7 @@ where
     }
 
     /// Predict sample state using a state prediction function 'f'.
-    pub fn predict(&mut self, f: fn(&VectorN<N, D>) -> VectorN<N, D>) {
+    pub fn predict(&mut self, f: impl Fn(&VectorN<N, D>) -> VectorN<N, D>) {
         self.s.iter_mut().for_each(|el| el.copy_from(&f(el)));
     }
 
@@ -505,7 +505,7 @@ where
 
 pub fn gaussian_observation_likelihood<'r, N: RealField + ToPrimitive, D: Dim, ZD: Dim>(
     z: &'r VectorN<N, ZD>,
-    h: fn(&VectorN<N, D>) -> VectorN<N, ZD>,
+    h: impl Fn(&VectorN<N, D>) -> VectorN<N, ZD> + 'r,
     noise: &CorrelatedNoise<N, ZD>,
 ) -> impl Fn(&VectorN<N, D>) -> f32 + 'r
 where
